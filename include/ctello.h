@@ -17,7 +17,7 @@
 //  You can contact the author via carlospzlz@gmail.com
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <akrzemi1/optional.hpp>
+#include <optional>
 #include <vector>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -59,8 +59,8 @@ public:
     bool SendCommandWithResponse(const std::string& command);
     bool EasyLanding();
     std::string GetTelloName();
-    std::experimental::optional<std::string> ReceiveResponse();
-    std::experimental::optional<std::string> GetState();
+    std::optional<std::string> ReceiveResponse();
+    std::optional<std::string> GetState();
     void createSockets();
     void closeSockets();
     Tello(const Tello&) = delete;

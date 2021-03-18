@@ -245,7 +245,7 @@ void Tello::FindTello()
 }
 std::string Tello::GetTelloName()
 {
-    std::experimental::optional<std::string> response;
+    std::optional<std::string> response;
     SendCommand("sn?");
     while (!(response = ReceiveResponse()))
         ;
@@ -257,7 +257,7 @@ bool Tello::EasyLanding(){
 }
 int Tello::GetBatteryStatus()
 {
-    std::experimental::optional<std::string> response;
+    std::optional<std::string> response;
     SendCommand("battery?");
     while (!(response = ReceiveResponse()))
         ;
@@ -269,7 +269,7 @@ int Tello::GetBatteryStatus()
 }
 void Tello::ShowTelloInfo()
 {
-    std::experimental::optional<std::string> response;
+    std::optional<std::string> response;
 
     SendCommand("sn?");
     while (!(response = ReceiveResponse()))
@@ -355,7 +355,7 @@ bool Tello::SendCommandWithResponse(const std::string& command)
     return isSuccess;
 }
 
-std::experimental::optional<std::string> Tello::ReceiveResponse()
+std::optional<std::string> Tello::ReceiveResponse()
 {
     const int size{32};
     std::vector<unsigned char> buffer(size, '\0');
@@ -375,7 +375,7 @@ std::experimental::optional<std::string> Tello::ReceiveResponse()
     return response;
 }
 
-std::experimental::optional<std::string> Tello::GetState()
+std::optional<std::string> Tello::GetState()
 {
     sockaddr_storage addr;
     const int size{1024};
