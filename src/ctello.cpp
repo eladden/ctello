@@ -366,7 +366,7 @@ std::optional<std::string> Tello::ReceiveResponse()
     {
         return {};
     }
-    std::string response{buffer.begin(), buffer.end() + bytes};
+    std::string response{buffer.begin(), buffer.begin() + bytes};
     // Some responses contain trailing white spaces.
     response.erase(response.find_last_not_of(" \n\r\t") + 1);
     spdlog::debug("127.0.0.1:{} <<<< {} bytes <<<< {}:{}: {}",
