@@ -50,39 +50,23 @@ using cv::imshow;
 using cv::VideoCapture;
 using cv::waitKey;
 /************* GLOBALS ***********/
-bool verboseDrone = true;
+bool verboseDrone = true, writeImages = true;
 VideoCapture globalCapture;
 Mat globalFrame;
 pthread_mutex_t frameLocker;
-
-void *UpdateFrame(void *arg)
-{
-    for(;;)
-    {
-        Mat tempFrame;
-        try {
-            globalCapture >> tempFrame;
-            cv::resize(tempFrame, tempFrame, cv::Size(960, 720));
-        } catch (const std::exception& e) {
-            std::cout << "Capture error: " << e.what();
-        }
-
-        pthread_mutex_lock(&frameLocker);
-        globalFrame = tempFrame;
-        pthread_mutex_unlock(&frameLocker);
-    }
-}
+std::vector<ORB_SLAM2::MapPoint*> allMapPoints;
+std::vector<ORB_SLAM2::MapPoint*> currMapPoints;
 
 /************* PATHS *************/
-const std::string slam_to_tello_file = "/tmp/slam_to_tello.txt";
-const std::string slam_to_tello_file_current_map = "/tmp/slam_to_tello_file_current_map.txt";
+//const std::string slam_to_tello_file = "/tmp/slam_to_tello.txt";
+//const std::string slam_to_tello_file_current_map = "/tmp/slam_to_tello_file_current_map.txt";
 std::string basefilename = "pointData";
-const char RequsetSavePoints= '1';
-const char PointsSaved = '2';
-const char CheckSlamStatus = '3';
-const char Exit = '5';
-char Localized = '0';
-int closeProgram = 0;
+//const char RequsetSavePoints= '1';
+//const char PointsSaved = '2';
+//const char CheckSlamStatus = '3';
+//const char Exit = '5';
+//char Localized = '0';
+//int closeProgram = 0;
 /************* OLD ORBSLAM *************/
 #define ROWS 720
 #define COLS 960
@@ -93,6 +77,28 @@ void send_signal(int signal);
 int get_signal(std::string fileName);
 void save_points();
 void save_curr_points();
+
+void *UpdateFrame(void *arg)
+{
+    for(int i=0;;++i)
+    {
+        Mat tempFrame;
+        try {
+            globalCapture >> tempFrame;
+            cv::resize(tempFrame, tempFrame, cv::Size(960, 720));
+            if (writeImages && !tempFrame.empty()){
+                cv::imwrite(basefilename + std::to_string(i) + ".jpg",tempFrame);
+            }
+        } catch (const std::exception& e) {
+            std::cout << "Capture error: " << e.what();
+        }
+
+        pthread_mutex_lock(&frameLocker);
+        globalFrame = tempFrame;
+        pthread_mutex_unlock(&frameLocker);
+    }
+}
+
 void saveCurrentPosition(cv::Mat Tcw){
     cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
     cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
@@ -103,8 +109,7 @@ void saveCurrentPosition(cv::Mat Tcw){
     << "," << q[1]<< "," << q[2]<< "," << q[3] << std::endl;
     currentPostionFile.close();
 }
-std::vector<ORB_SLAM2::MapPoint*> allMapPoints;
-std::vector<ORB_SLAM2::MapPoint*> currMapPoints;
+
 void saveCurrentMap(){
     std::ofstream currentPointData;
     currentPointData.open(basefilename + ".csv");
@@ -115,6 +120,7 @@ void saveCurrentMap(){
 
     currentPointData.close();
 }
+
 void saveMap( int fileNumber=0 ) {
 
     std::string dirname = basefilename + "Dir";
@@ -140,10 +146,19 @@ void saveMap( int fileNumber=0 ) {
             << "," << q[1]<< "," << q[2]<< "," << q[3] << "," << frameId <<
             ","<< twc.at<float>(0)  << "," << twc.at<float>(1)  << "," << twc.at<float>(2) << std::endl;
 
+            if (writeImages &&
+                    std::find(savedFrames.begin(), savedFrames.end(), frameId) == savedFrames.end())
+            {
+                savedFrames.push_back(frameId);
+                const string command = "mv " + basefilename + std::to_string(frameId) + ".jpg ./" + dirname + "/Frames";
+                system(command.c_str());
+            }
+
         }
     }
     pointData.close();
     std::cout << "saved map" << std::endl;
+    system("rm *.jpg");
 }
 
 int main(int argc, char **argv)
@@ -243,7 +258,7 @@ int main(int argc, char **argv)
                 initialAngle = currentAngle;
                 std::cout << "initial angle: " << initialAngle << std::endl;
             }
-            else if (sumAngle <= 3.0f &&//index < initialize_commands.size() + scan_times*scan_commands.size() &&//
+            else if (sumAngle <= 6.0f &&//index < initialize_commands.size() + scan_times*scan_commands.size() &&//
                      SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK &&
                      lostIdx%lost_commands.size() == 0 &&
                      endIdx == 0 && !done){
