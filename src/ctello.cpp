@@ -219,7 +219,8 @@ bool Tello::Bind(const int local_client_command_port)
     {
         char userName[255];
         getlogin_r(userName, 255);
-        std::string telloFolder = "/home/" + std::string(userName) + "/tello_logs";
+        std::string home = getenv("HOME");
+        std::string telloFolder = home + "/" + std::string(userName) + "/tello_logs";
         if (!(stat(telloFolder.c_str(), &info) == 0 && info.st_mode & S_IFDIR))
         {
             system(("mkdir " + telloFolder).c_str());
@@ -253,7 +254,7 @@ std::string Tello::GetTelloName()
 }
 bool Tello::EasyLanding(){
     while (!SendCommandWithResponse("down 20"));
-    SendCommand("land");
+    return SendCommand("land");
 }
 int Tello::GetBatteryStatus()
 {
