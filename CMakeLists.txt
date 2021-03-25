@@ -37,6 +37,7 @@ include_directories(
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
 add_library(ORB_SLAM2 SHARED
+        ${PROJECT_SOURCE_DIR}/src/ctello_ORB_support.cpp
         ${ORB_SLAM2_DIR}/src/System.cc
         ${ORB_SLAM2_DIR}/src/Tracking.cc
         ${ORB_SLAM2_DIR}/src/LocalMapping.cc
@@ -108,15 +109,16 @@ target_link_libraries(ctello-stream ${OpenCV_LIBS})
 
 install(TARGETS ctello-stream DESTINATION bin)
 
+
 # CTello Examples =============================================================
 
-## ORBSLAM --------------------------------------------------------------------
-add_executable(tello_SLAM examples/tello_SLAM.cpp)
+## Scan Room --------------------------------------------------------------------
+add_executable(scan_room examples/scan_room.cpp)
 
-target_include_directories(tello_SLAM PRIVATE include)
+target_include_directories(scan_room PRIVATE include)
 
-target_link_libraries(tello_SLAM ctello ${Pangolin_LIBRARIES})
-target_link_libraries(tello_SLAM ${OpenCV_LIBS} ORB_SLAM2)
+target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
+target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2)
 
 ## Flip -----------------------------------------------------------------------
 add_executable(flip examples/flip.cpp)
