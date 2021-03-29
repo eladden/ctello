@@ -47,7 +47,6 @@ const bool verboseDrone = false; //this is if you need the drone commands/replys
 
 int main(int argc, char **argv)
 {
-    //TODO: add variables: height, saved name, angle of scan
     if(argc < 2)
     {
         std::cerr << std::endl << "Usage: ./tello_SLAM path_to_vocabulary path_to_settings" << std::endl;
@@ -84,13 +83,15 @@ int main(int argc, char **argv)
 
     //constants for the loop
 
-    std::array<std::string, 3> initialize_commands{"takeoff", "up 80", "down 25"};
-    std::array<std::string, 3> scan_commands{"cw 25", "up 25", "down 25"};
+    std::array<std::string, 3> initialize_commands{"takeoff", "up 25", "down 25"};
+    std::array<std::string, 2> lost_commands{"up 25", "down 25"};
+    std::array<std::string, 4> scale_commands{"up 50", "down 50", "up 100", "down 100"};
+    //std::array<std::string, 3> test_commands{"cw 25", "up 25","down 25"};
     std::array<std::string, 3> end_commands{"land", "battery?","streamoff"};
-    std::array<std::string, 3> lost_commands{"ccw 20","up 25", "down 25"};
 
-    unsigned index{0}, lostIdx{0}, endIdx{0};
-    float initialAngle=0, currentAngle=0, previousAngle=0, sumAngle=0;
+    unsigned index{0}, endIdx{0}, lostIdx{0};
+    double previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0}, initialHeightDrone{0}, initialHeightSLAM{0};
+    double scaleFromInit{0}, scaleFromPrev{0};
     bool busy{false},gotNewFrame{false},done{false};
 
     // main loop
@@ -122,51 +123,44 @@ int main(int argc, char **argv)
 
         if (const auto response = tello.ReceiveResponse())
         {
-            if (verboseDrone || endIdx != 0)
+            if (verboseDrone)
                 std::cout << "Tello: " << *response << std::endl;
             busy = false;
         }
 
-        //Get the rotation of the current frame (we could use quaternions, but I'd rather use the rotation mat. I f* hate quaternions dude
-        Mat Rwc;
+        std::cout << "The drone height is : " << tello.GetHeight() << std::endl;
+
+        //Get the position of the current frame (we could use quaternions, but I'd rather use the rotation mat. I f* hate quaternions dude
+        Mat twc;
         if (gotNewFrame && SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK) {
             currentKeyFrame = SLAM.GetMap()->GetAllKeyFrames().back();
-            Rwc = currentKeyFrame->GetRotation();
-            //Rwc = Rz(a)Ry(b)Rx(g) = [c(a)c(b) c(a)s(b)s(g)-s(a)c(g) c(a)s(b)c(g)+s(a)s(g)
-            //                         s(a)c(b) s(a)s(b)s(g)+c(a)c(g) s(a)s(b)c(g)-c(a)s(g)
-            //                         -s(b)          c(b)s(g)              c(b)c(g)]
-            //So to get the rotation angle beta around the y axis we can use Rwc(0,1) = -s(b)
-            float beta = asin(-Rwc.at<float>(2,0)); //This is the angle of rotation around the y axis (beta)
-            currentAngle = beta; // see? simple!
+            twc = currentKeyFrame->GetTranslation();
+            currentHeightSLAM = twc.at<double>(0,1);
+            currentHeightDrone = tello.GetHeight() * 10; //the height is given in dm, multiply to convert to cm
         }
         // Act
         if (!busy)// && (index < total_commands))
         {
             std::string command;
             if (index < initialize_commands.size()){
-                command = initialize_commands[index];
-                initialAngle = currentAngle;
-                if (verboseDrone){
-                    std::cout << "initial angle: " << initialAngle << std::endl;
+                command = initialize_commands[index++];
+                if (index == initialize_commands.size()){
+                    initialHeightDrone = currentHeightDrone;
+                    initialHeightSLAM  = currentHeightSLAM;
+
+                    std::cout << "Height measured by drone: " << initialHeightSLAM << "cm";
+                    std::cout << "Height estimated by SLAM: " << initialHeightSLAM<< "cm";
                 }
             }
-
-            //The angle we get is beta = [-pi,pi]. It starts at 0, then goes up or down,
-            // but eventually we get to either pi or -pi then we have a jump.
-            // To see how much the drone rotated, we measure the difference from the previous state in sumAngle
-            else if (sumAngle <= 6.5f && // 2pi turn (drone usually does more, but that's ok I guess)
+            else if (index < initialize_commands.size() + scale_commands.size() &&
                      SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK &&
-                     lostIdx%lost_commands.size() == 0 &&
-                     endIdx == 0 && !done){
-                command = scan_commands[(index-initialize_commands.size())%scan_commands.size()];
-                if (currentAngle >= previousAngle){
-                    sumAngle += currentAngle-previousAngle;
-                }
-                else{
-                    sumAngle += previousAngle - currentAngle;
-                }
-                if (verboseDrone)
-                    std::cout << "current angle: " << sumAngle << std::endl;
+                     lostIdx%lost_commands.size() !=0){
+                command = scale_commands[index++];
+                scaleFromInit += std::sqrt(std::pow(currentHeightSLAM,2) - std::pow(initialHeightSLAM,2))/
+                        std::sqrt(std::pow(currentHeightDrone,2) - std::pow(initialHeightDrone,2));
+                scaleFromPrev += std::sqrt(std::pow(currentHeightSLAM,2) - std::pow(previousHeightSLAM,2))/
+                        std::sqrt(std::pow(currentHeightDrone,2) - std::pow(previousHeightDrone,2));
+
             }
             else if ((SLAM.GetTrackingState() == ORB_SLAM2::Tracking::LOST || (lostIdx)%lost_commands.size() != 0) &&
                      endIdx == 0 && !done){
@@ -174,13 +168,16 @@ int main(int argc, char **argv)
                 lostIdx++;
             }
             else{
+                scaleFromInit = scaleFromInit/(index-initialize_commands.size());
+                scaleFromPrev = scaleFromPrev/(index-initialize_commands.size());
                 command = end_commands[endIdx++];
                 if (endIdx == end_commands.size()){
                     done=true;
                 }
             }
-            ++index;
-            previousAngle = currentAngle;
+
+            previousHeightSLAM = currentHeightSLAM;
+            previousHeightDrone = currentHeightDrone;
             tello.SendCommand(command);
             if(verboseDrone){
                 std::cout << "Command: " << command << std::endl;
@@ -196,11 +193,9 @@ int main(int argc, char **argv)
     }
     pthread_join(UpdThread,nullptr);
     globalCapture.release();
-    allMapPoints = SLAM.GetMap()->GetAllMapPoints();
-    if (allMapPoints.size() > 0)
-    {
-        saveMap(0);
-    }
+
+    std::cout << "The scale from the initial height: " << scaleFromInit << "cm";
+    std::cout << "The scale from the previous height: " << scaleFromPrev<< "cm";
 
     SLAM.Shutdown();
 }

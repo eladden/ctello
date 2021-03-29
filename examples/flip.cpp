@@ -46,9 +46,9 @@ int main()
         ;
 
 //    VideoCapture capture{TELLO_STREAM_URL, CAP_FFMPEG};
-    std::array<std::string, 1> commands{"land"};//battery?","takeoff", "flip l", "flip r", "flip f",
-                                        //"flip b",  "stop",   "cw 360", "land"};
-    int index{0};
+    std::array<std::string, 1> commands{"land"};
+   // std::array<std::string, 9> commands{"battery?","takeoff", "flip l", "flip r", "flip f","flip b",  "stop",   "cw 360", "land"};
+    unsigned index{0};
     bool busy{false};
     while (true)
     {
@@ -79,7 +79,7 @@ int main()
 //            tello.SendCommand("land");
 //            break;
 //        }
-        if (index >= 1){
+        if (index >= commands.size()){
             std::cout << "Done!" << std::endl;
             break;
         }

@@ -268,6 +268,18 @@ int Tello::GetBatteryStatus()
     }
     return 0;
 }
+double Tello::GetHeight()
+{
+    std::optional<std::string> response;
+    SendCommand("height?");
+    while (!(response = ReceiveResponse()))
+        ;
+    if (response)
+    {
+        return std::stod(response.value());
+    }
+    return 0;
+}
 void Tello::ShowTelloInfo()
 {
     std::optional<std::string> response;

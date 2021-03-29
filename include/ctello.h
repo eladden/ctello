@@ -61,6 +61,7 @@ public:
     std::string GetTelloName();
     std::optional<std::string> ReceiveResponse();
     std::optional<std::string> GetState();
+    double GetHeight();
     void createSockets();
     void closeSockets();
     Tello(const Tello&) = delete;

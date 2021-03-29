@@ -120,6 +120,14 @@ target_include_directories(scan_room PRIVATE include)
 target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
 target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2)
 
+## Scale --------------------------------------------------------------------
+add_executable(scale examples/scale_ORBSlam.cpp)
+
+target_include_directories(scale PRIVATE include)
+
+target_link_libraries(scale ctello ${Pangolin_LIBRARIES})
+target_link_libraries(scale ${OpenCV_LIBS} ORB_SLAM2)
+
 ## Flip -----------------------------------------------------------------------
 add_executable(flip examples/flip.cpp)
 
