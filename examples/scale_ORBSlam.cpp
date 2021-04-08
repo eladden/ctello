@@ -43,10 +43,37 @@ using cv::imshow;
 using cv::VideoCapture;
 using cv::waitKey;
 
-const bool verboseDrone = false; //this is if you need the drone commands/replys for debug
+bool updateSLAM(cv::Mat &currentFrame_, cv::Mat &Tcw_,
+                 ORB_SLAM2::System * SLAM_){
+
+    double currentFrameMilisecondPos;
+    bool gotNewFrame = false;
+    pthread_mutex_lock(&frameLocker);
+    currentFrame_ = globalFrame;
+    currentFrameMilisecondPos = globalCapture.get(cv::CAP_PROP_POS_MSEC);
+    pthread_mutex_unlock(&frameLocker);
+
+    if(currentFrame_.empty()){
+        gotNewFrame = false;
+    }
+    else{
+        gotNewFrame = true;
+    }
+    if (gotNewFrame){
+        try {
+            Tcw_ = SLAM_->TrackMonocular(currentFrame_,currentFrameMilisecondPos);
+        } catch (const std::exception& e) {
+            cout << "ORBSLAM error: " << e.what();
+        }
+    }
+    return gotNewFrame;
+}
 
 int main(int argc, char **argv)
 {
+    writeImages = false; //TODO add options for this as well
+    if (!verboseDrone)
+        std::setvbuf(stderr,nullptr,_IOFBF,1024); // This gets rid of ffmpeg error messages and buffers theme to oblivion
     if(argc < 2)
     {
         std::cerr << std::endl << "Usage: ./tello_SLAM path_to_vocabulary path_to_settings" << std::endl;
@@ -59,7 +86,7 @@ int main(int argc, char **argv)
 
     std::cout << "Starting Tello..." << std::endl;
     Tello tello{};
-    if (!tello.Bind())
+    if (!tello.Bind(LOCAL_CLIENT_COMMAND_PORT,""))
     {
         return 0;
     }
@@ -83,83 +110,109 @@ int main(int argc, char **argv)
 
     //constants for the loop
 
-    std::array<std::string, 3> initialize_commands{"takeoff", "up 25", "down 25"};
+    std::array<std::string, 5> initialize_commands{"takeoff", "up 25", "down 25", "up 60", "down 60"};
     std::array<std::string, 2> lost_commands{"up 25", "down 25"};
-    std::array<std::string, 4> scale_commands{"up 50", "down 50", "up 100", "down 100"};
+    std::array<std::string, 2> scale_commands{"up 65", "down 65"};
     //std::array<std::string, 3> test_commands{"cw 25", "up 25","down 25"};
-    std::array<std::string, 3> end_commands{"land", "battery?","streamoff"};
+    //std::array<std::string, 2> end_commands{"land", "streamoff"};
 
-    unsigned index{0}, endIdx{0}, lostIdx{0};
-    double previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0}, initialHeightDrone{0}, initialHeightSLAM{0};
-    double scaleFromInit{0}, scaleFromPrev{0};
+    unsigned index{0}, endIdx{0}, lostIdx{0}, busyIdx{0};
+    const unsigned repetitions{6};
+    double previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0};//, initialHeightDrone{0}, initialHeightSLAM{0};
+    double /*scaleFromInit{0},*/ scaleFromPrev{0};
     bool busy{false},gotNewFrame{false},done{false};
+    cv::Mat currentFrame;
+    cv::Mat Tcw;
 
-    // main loop
-    while (true)
+    // scaling loop
+    while (!done)
     {
-        // See surrounding.
-
-        Mat currentFrame;
-        ORB_SLAM2::KeyFrame* currentKeyFrame;
-        double currentFrameMilisecondPos;
-
-        pthread_mutex_lock(&frameLocker);
-        currentFrame = globalFrame;
-        currentFrameMilisecondPos = globalCapture.get(cv::CAP_PROP_POS_MSEC);
-        pthread_mutex_unlock(&frameLocker);
-
-        if(currentFrame.empty()){
-            gotNewFrame = false;
-        }
-        else
-            gotNewFrame = true;
-        if (gotNewFrame){
-            try {
-                SLAM.TrackMonocular(currentFrame,currentFrameMilisecondPos);
-            } catch (const std::exception& e) {
-                cout << "ORBSLAM error: " << e.what();
+        if (const std::optional<string> response = tello.ReceiveResponse())
+        {
+            std::string respStr = response.value();
+            if (respStr.find("OK") != std::string::npos ||
+                    respStr.find("ok") != std::string::npos)
+            {
+                busy = false;
+                busyIdx = 0;
+            }else if (respStr.find("ERROR") != std::string::npos ||
+                         respStr.find("error") != std::string::npos)
+            {
+                busyIdx = 1000;
             }
-        }
 
-        if (const auto response = tello.ReceiveResponse())
-        {
+            else
+                busyIdx++;
+            //TODO: add other possible tello outputs here like can't find IMU and whatnot
             if (verboseDrone)
-                std::cout << "Tello: " << *response << std::endl;
-            busy = false;
+                std::cout << "Tello: " << respStr << std::endl;
         }
 
-        std::cout << "The drone height is : " << tello.GetHeight() << std::endl;
+        // See surrounding.
+        gotNewFrame = updateSLAM(currentFrame,Tcw,&SLAM);
 
-        //Get the position of the current frame (we could use quaternions, but I'd rather use the rotation mat. I f* hate quaternions dude
-        Mat twc;
-        if (gotNewFrame && SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK) {
-            currentKeyFrame = SLAM.GetMap()->GetAllKeyFrames().back();
-            twc = currentKeyFrame->GetTranslation();
-            currentHeightSLAM = twc.at<double>(0,1);
-            currentHeightDrone = tello.GetHeight() * 10; //the height is given in dm, multiply to convert to cm
-        }
         // Act
-        if (!busy)// && (index < total_commands))
+        if (!busy && !done)// && (index < total_commands))
         {
+            //Get the position of the current frame (we could use quaternions, but I'd rather use the rotation mat. I f* hate quaternions dude
+
+            if (gotNewFrame && SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK) {
+
+                tello.SendCommand("height?");
+                std::optional<string> response = tello.ReceiveResponse();
+
+                while (!done)
+                {
+                    gotNewFrame = updateSLAM(currentFrame,Tcw,&SLAM);
+
+                    if (response){
+                        std::string respStr = response.value();
+
+                        if (respStr.find("ERROR") != std::string::npos ||
+                            respStr.find("error") != std::string::npos){
+                            tello.SendCommand("land");
+                            std::cerr << "got an error from drone" << std::endl;
+                            abort();
+                        }
+
+                        currentHeightDrone = std::stod(respStr) * 10;
+
+                        break;
+                    }
+                    else{
+                        response = tello.ReceiveResponse();
+                    }
+
+                }
+                //cv::Mat Tcw = currentKeyFrame->GetPose(); //Position homogenious mat.
+                cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t(); //Rotation in world coordinates
+                cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3); // translation in world coordinates
+
+                currentHeightSLAM = -static_cast<double>(twc.at<float>(2)); // see? simple!
+                 //the height is given in dm, multiply to convert to cm
+                if (verboseDrone){
+                    //std::cout << "Rwc = " << std::endl << " " << Rwc << std::endl << std::endl;
+                    std::cout << "Current height measured by drone: " << currentHeightDrone << "cm" << std::endl;
+                    std::cout << "Current height estimated by SLAM: " << currentHeightSLAM << std::endl;
+                }
+            }
             std::string command;
             if (index < initialize_commands.size()){
                 command = initialize_commands[index++];
-                if (index == initialize_commands.size()){
-                    initialHeightDrone = currentHeightDrone;
-                    initialHeightSLAM  = currentHeightSLAM;
-
-                    std::cout << "Height measured by drone: " << initialHeightSLAM << "cm";
-                    std::cout << "Height estimated by SLAM: " << initialHeightSLAM<< "cm";
-                }
             }
-            else if (index < initialize_commands.size() + scale_commands.size() &&
+            else if (index < initialize_commands.size() + scale_commands.size()*repetitions &&
                      SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK &&
-                     lostIdx%lost_commands.size() !=0){
-                command = scale_commands[index++];
-                scaleFromInit += std::sqrt(std::pow(currentHeightSLAM,2) - std::pow(initialHeightSLAM,2))/
-                        std::sqrt(std::pow(currentHeightDrone,2) - std::pow(initialHeightDrone,2));
-                scaleFromPrev += std::sqrt(std::pow(currentHeightSLAM,2) - std::pow(previousHeightSLAM,2))/
-                        std::sqrt(std::pow(currentHeightDrone,2) - std::pow(previousHeightDrone,2));
+                     lostIdx%lost_commands.size() == 0 && endIdx == 0 && !done){
+//                if (index == initialize_commands.size()){
+//                    SLAM.ActivateLocalizationMode();
+//                }
+
+                command = scale_commands[(index - initialize_commands.size())%scale_commands.size()];
+
+                scaleFromPrev += std::sqrt(std::pow(currentHeightSLAM - previousHeightSLAM,2))/
+                        std::sqrt(std::pow(currentHeightDrone - previousHeightDrone,2));
+                //std::cout << "added " << index - initialize_commands.size() << std::endl;
+                index++;
 
             }
             else if ((SLAM.GetTrackingState() == ORB_SLAM2::Tracking::LOST || (lostIdx)%lost_commands.size() != 0) &&
@@ -168,34 +221,92 @@ int main(int argc, char **argv)
                 lostIdx++;
             }
             else{
-                scaleFromInit = scaleFromInit/(index-initialize_commands.size());
-                scaleFromPrev = scaleFromPrev/(index-initialize_commands.size());
-                command = end_commands[endIdx++];
-                if (endIdx == end_commands.size()){
+                //command = end_commands[endIdx++];
+                //if (endIdx == end_commands.size()){
+                    //scaleFromInit = scaleFromInit/(scale_commands.size()*repetitions);
+                    scaleFromPrev = scaleFromPrev/(scale_commands.size()*repetitions);
                     done=true;
-                }
+                    std::cout << "Done!" << std::endl;
+                    break;
+                //}
             }
 
             previousHeightSLAM = currentHeightSLAM;
             previousHeightDrone = currentHeightDrone;
-            tello.SendCommand(command);
-            if(verboseDrone){
-                std::cout << "Command: " << command << std::endl;
+            if (!done){
+                tello.SendCommand(command);
+                if(verboseDrone){
+                    std::cout << "Command: " << command << std::endl;
+                }
+                busy = true;
+
             }
-            busy = true;
         }
 
-        if (done){
-            std::cout << "Done!" << std::endl;
-            killFrameUpdate = true; //Shut down the frame update thread main loop
+//        if (done){
+//            while (!(tello.ReceiveResponse()))
+//                ;
+//            std::cout << "Done!" << std::endl;
+//            killFrameUpdate = true; //Shut down the frame update thread main loop
+//            break;
+//        }
+        if (busyIdx >= 100){
+            std::cout << "Something went wrong!" << std::endl;
+            tello.SendCommandWithResponse("land");
             break;
         }
+    }//End of scaling loop
+
+
+    std::cout << "tello bat: " << tello.GetBatteryStatus() << std::endl;
+    float scale = static_cast<float>(scaleFromPrev = 1/scaleFromPrev);
+    std::cout << "The scale from the previous height: " << scale<< std::endl;
+
+    allMapPoints = SLAM.GetMap()->GetAllMapPoints();
+    if (allMapPoints.size() > 0)
+    {
+        saveMap(0);
     }
+
+    ///////// Now we have a scale, lets see if we can get distances
+    float wallDist{1e10};
+    if (verboseDrone)
+        std::cout << "starting forward loop..." << std::endl;
+    tello.SendCommand("forward 25");
+    if(verboseDrone){
+        std::cout << "Command: " << "forward 25" << std::endl;
+    }
+    while(SLAM.GetTrackingState()!=ORB_SLAM2::Tracking::LOST && wallDist > 70){
+
+
+        gotNewFrame = updateSLAM(currentFrame,Tcw,&SLAM);
+        if (gotNewFrame){
+            AnalyzedFrame analyzedFrame(&SLAM,scale);
+            wallDist = analyzedFrame.GetMinNonFloorDist();
+        }
+
+
+        if (const auto response = tello.ReceiveResponse())
+        {
+            if (verboseDrone){
+                std::cout << "Tello: " << *response << std::endl;
+                std::cout << "WallDist: " << wallDist<< std::endl;
+            }
+            tello.SendCommand("forward 25");
+            if(verboseDrone){
+                std::cout << "Command: " << "forward 25" << std::endl;
+            }
+        }
+    }
+    if (verboseDrone)
+        std::cout << "WallDist at land: " << wallDist<< std::endl;
+    tello.SendCommandWithResponse("land");
+    killFrameUpdate = true;
     pthread_join(UpdThread,nullptr);
     globalCapture.release();
+    std::cout << "tello bat: " << tello.GetBatteryStatus() << std::endl;
 
-    std::cout << "The scale from the initial height: " << scaleFromInit << "cm";
-    std::cout << "The scale from the previous height: " << scaleFromPrev<< "cm";
+    //SLAM.SaveKeyFrameTrajectoryTUM("traject.csv");
 
     SLAM.Shutdown();
 }

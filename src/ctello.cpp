@@ -180,7 +180,7 @@ void Tello::createSockets()
     m_command_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     m_state_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 }
-bool Tello::Bind(const int local_client_command_port)
+bool Tello::Bind(const int local_client_command_port,const std::string logDirName)
 {
     // UDP Client to send commands and receive responses
     auto result =
@@ -215,12 +215,12 @@ bool Tello::Bind(const int local_client_command_port)
     ShowTelloInfo();
     struct stat info;
 
-    if (stat("/home", &info) == 0 && (info.st_mode & S_IFDIR))
+    if (stat("/home", &info) == 0 && (info.st_mode & S_IFDIR) && !logDirName.empty())
     {
         char userName[255];
         getlogin_r(userName, 255);
         std::string home = getenv("HOME");
-        std::string telloFolder = home + "/" + std::string(userName) + "/tello_logs";
+        std::string telloFolder = home + "/" + std::string(userName) + logDirName;
         if (!(stat(telloFolder.c_str(), &info) == 0 && info.st_mode & S_IFDIR))
         {
             system(("mkdir " + telloFolder).c_str());
@@ -264,22 +264,34 @@ int Tello::GetBatteryStatus()
         ;
     if (response)
     {
-        return std::stoi(response.value());
+        try
+        {
+            return std::stoi(response.value());
+        }
+        catch (const std::exception& e){
+            return -1;
+        }
     }
     return 0;
 }
 double Tello::GetHeight()
 {
+    double toReturn{-1.0};
     std::optional<std::string> response;
     SendCommand("height?");
     while (!(response = ReceiveResponse()))
         ;
     if (response)
     {
-        return std::stod(response.value());
+        try{
+            toReturn =  std::stod(response.value());
+        } catch (const std::exception& e) {
+            toReturn = -1;
+        }
     }
-    return 0;
+    return toReturn;
 }
+
 void Tello::ShowTelloInfo()
 {
     std::optional<std::string> response;
@@ -385,7 +397,7 @@ std::optional<std::string> Tello::ReceiveResponse()
     spdlog::debug("127.0.0.1:{} <<<< {} bytes <<<< {}:{}: {}",
                   m_local_client_command_port, bytes, TELLO_SERVER_IP,
                   TELLO_SERVER_COMMAND_PORT, response);
-    return response;
+    return std::move(response);
 }
 
 std::optional<std::string> Tello::GetState()

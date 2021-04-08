@@ -43,10 +43,9 @@ using cv::imshow;
 using cv::VideoCapture;
 using cv::waitKey;
 
-const bool verboseDrone = false; //this is if you need the drone commands/replys for debug
-
 int main(int argc, char **argv)
 {
+    std::setvbuf(stderr,nullptr,_IOFBF,1024); // This gets rid of ffmpeg error messages and buffers theme to oblivion
     //TODO: add variables: height, saved name, angle of scan
     if(argc < 2)
     {
@@ -154,7 +153,7 @@ int main(int argc, char **argv)
             //The angle we get is beta = [-pi,pi]. It starts at 0, then goes up or down,
             // but eventually we get to either pi or -pi then we have a jump.
             // To see how much the drone rotated, we measure the difference from the previous state in sumAngle
-            else if (sumAngle <= 6.5f && // 2pi turn (drone usually does more, but that's ok I guess)
+            else if (sumAngle <= 1.0f && // 2pi turn (drone usually does more, but that's ok I guess)
                      SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK &&
                      lostIdx%lost_commands.size() == 0 &&
                      endIdx == 0 && !done){

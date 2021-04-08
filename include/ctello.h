@@ -53,7 +53,7 @@ class Tello
 public:
     Tello();
     ~Tello();
-    bool Bind(int local_client_command_port = LOCAL_CLIENT_COMMAND_PORT);
+    bool Bind(int local_client_command_port = LOCAL_CLIENT_COMMAND_PORT,const std::string logDirName = "/tello_logs" );
     int GetBatteryStatus();
     bool SendCommand(const std::string& command);
     bool SendCommandWithResponse(const std::string& command);
