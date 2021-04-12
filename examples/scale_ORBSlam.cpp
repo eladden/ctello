@@ -110,16 +110,15 @@ int main(int argc, char **argv)
 
     //constants for the loop
 
-    std::array<std::string, 5> initialize_commands{"takeoff", "up 25", "down 25", "up 60", "down 60"};
+    std::array<std::string, 6> initialize_commands{"takeoff","left 25", "right 50", "left 25", "up 25", "down 25"};
     std::array<std::string, 2> lost_commands{"up 25", "down 25"};
-    std::array<std::string, 2> scale_commands{"up 65", "down 65"};
-    //std::array<std::string, 3> test_commands{"cw 25", "up 25","down 25"};
-    //std::array<std::string, 2> end_commands{"land", "streamoff"};
+    std::array<std::string, 2> scale_commands{"up 70", "down 70"};
+
 
     unsigned index{0}, endIdx{0}, lostIdx{0}, busyIdx{0};
-    const unsigned repetitions{6};
-    double previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0};//, initialHeightDrone{0}, initialHeightSLAM{0};
-    double /*scaleFromInit{0},*/ scaleFromPrev{0};
+    const unsigned repetitions{3};
+    float previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0};//, initialHeightDrone{0}, initialHeightSLAM{0};
+    float /*scaleFromInit{0},*/ scale{0};
     bool busy{false},gotNewFrame{false},done{false};
     cv::Mat currentFrame;
     cv::Mat Tcw;
@@ -138,7 +137,9 @@ int main(int argc, char **argv)
             }else if (respStr.find("ERROR") != std::string::npos ||
                          respStr.find("error") != std::string::npos)
             {
-                busyIdx = 1000;
+                tello.SendCommand("land");
+                std::cerr << "Landing because of error" << std::endl;
+                abort();
             }
 
             else
@@ -175,7 +176,8 @@ int main(int argc, char **argv)
                             abort();
                         }
 
-                        currentHeightDrone = std::stod(respStr) * 10;
+                        // the 10 is because Tello measures in dm. The minus because we're working with ORB_SLAM coordinates
+                        currentHeightDrone = -std::stof(respStr) * 10;
 
                         break;
                     }
@@ -188,31 +190,40 @@ int main(int argc, char **argv)
                 cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t(); //Rotation in world coordinates
                 cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3); // translation in world coordinates
 
-                currentHeightSLAM = -static_cast<double>(twc.at<float>(2)); // see? simple!
+                currentHeightSLAM = twc.at<float>(1); // see? simple!
                  //the height is given in dm, multiply to convert to cm
                 if (verboseDrone){
-                    //std::cout << "Rwc = " << std::endl << " " << Rwc << std::endl << std::endl;
                     std::cout << "Current height measured by drone: " << currentHeightDrone << "cm" << std::endl;
                     std::cout << "Current height estimated by SLAM: " << currentHeightSLAM << std::endl;
+                    std::cout << "Previous height measured by drone: " << previousHeightDrone << "cm" << std::endl;
+                    std::cout << "Previous height estimated by SLAM: " << previousHeightSLAM << std::endl;
                 }
             }
             std::string command;
             if (index < initialize_commands.size()){
                 command = initialize_commands[index++];
+                if (SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK)
+                {
+                    index = initialize_commands.size();
+                    if (verboseDrone)
+                        std::cout << "Starting scaling loop..." << std::endl;
+                    continue;
+                }
             }
             else if (index < initialize_commands.size() + scale_commands.size()*repetitions &&
                      SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK &&
                      lostIdx%lost_commands.size() == 0 && endIdx == 0 && !done){
-//                if (index == initialize_commands.size()){
-//                    SLAM.ActivateLocalizationMode();
-//                }
 
                 command = scale_commands[(index - initialize_commands.size())%scale_commands.size()];
 
-                scaleFromPrev += std::sqrt(std::pow(currentHeightSLAM - previousHeightSLAM,2))/
-                        std::sqrt(std::pow(currentHeightDrone - previousHeightDrone,2));
-                //std::cout << "added " << index - initialize_commands.size() << std::endl;
+                if (index > initialize_commands.size() +1) //The initial number 0 is meaningless
+                    scale += std::fabs(currentHeightSLAM - previousHeightSLAM)/
+                        std::fabs(currentHeightDrone - previousHeightDrone);
                 index++;
+                if (verboseDrone){
+                    std::cout << "scale sum: " << scale << std::endl;
+                    std::cout << "scale: " << scale/(index - initialize_commands.size()) << std::endl;
+                }
 
             }
             else if ((SLAM.GetTrackingState() == ORB_SLAM2::Tracking::LOST || (lostIdx)%lost_commands.size() != 0) &&
@@ -221,16 +232,16 @@ int main(int argc, char **argv)
                 lostIdx++;
             }
             else{
-                //command = end_commands[endIdx++];
-                //if (endIdx == end_commands.size()){
-                    //scaleFromInit = scaleFromInit/(scale_commands.size()*repetitions);
-                    scaleFromPrev = scaleFromPrev/(scale_commands.size()*repetitions);
+                    scale = scale/(scale_commands.size()*repetitions);
                     done=true;
-                    std::cout << "Done!" << std::endl;
+                    if (index == initialize_commands.size())
+                        std::cout <<"Failed to initialize" << std::endl;
+                    else
+                        std::cout << "Done!" << std::endl;
                     break;
-                //}
             }
 
+            //if (std::abs(currentHeightSLAM - previousHeightSLAM) < 1e-5f)
             previousHeightSLAM = currentHeightSLAM;
             previousHeightDrone = currentHeightDrone;
             if (!done){
@@ -243,23 +254,21 @@ int main(int argc, char **argv)
             }
         }
 
-//        if (done){
-//            while (!(tello.ReceiveResponse()))
-//                ;
-//            std::cout << "Done!" << std::endl;
-//            killFrameUpdate = true; //Shut down the frame update thread main loop
-//            break;
-//        }
-        if (busyIdx >= 100){
+        /*if (busyIdx >= 100){
             std::cout << "Something went wrong!" << std::endl;
             tello.SendCommandWithResponse("land");
             break;
-        }
+        }*/
     }//End of scaling loop
 
 
     std::cout << "tello bat: " << tello.GetBatteryStatus() << std::endl;
-    float scale = static_cast<float>(scaleFromPrev = 1/scaleFromPrev);
+    scale = 1/scale;
+    if (std::isinf(scale) || std::isnan(scale))
+    {
+        std::cerr << "Bad scale!" << std::endl;
+        abort();
+    }
     std::cout << "The scale from the previous height: " << scale<< std::endl;
 
     allMapPoints = SLAM.GetMap()->GetAllMapPoints();
@@ -269,41 +278,88 @@ int main(int argc, char **argv)
     }
 
     ///////// Now we have a scale, lets see if we can get distances
-    float wallDist{1e10};
+    float avgWallDist{0.0}, wallDist{1e10};
+    index = 0;
     if (verboseDrone)
         std::cout << "starting forward loop..." << std::endl;
+    //std::array<std::string, 3> commands{"left 25", "right 25","forward 25"};
+    //int idx = 0;
     tello.SendCommand("forward 25");
     if(verboseDrone){
         std::cout << "Command: " << "forward 25" << std::endl;
     }
-    while(SLAM.GetTrackingState()!=ORB_SLAM2::Tracking::LOST && wallDist > 70){
+    cv::Mat selfPose_, averagePoint_, minWallPoint_,minFloorPoint_;
+    float floorDist_{0},averageDist_{0};
+    bool allOK{true};
+    while (allOK){
+        if (SLAM.GetTrackingState()==ORB_SLAM2::Tracking::LOST){
+            allOK = false;
+            std::cout<< "Lost ORB SLAM" << std::endl;
+        }
+        if (wallDist <= 100){//(wallDist > 50 || floorDist_ > 50)){
+            allOK = false;
+            std::cout<< "Too close to wall" << std::endl;
+        }
 
 
         gotNewFrame = updateSLAM(currentFrame,Tcw,&SLAM);
         if (gotNewFrame){
             AnalyzedFrame analyzedFrame(&SLAM,scale);
-            wallDist = analyzedFrame.GetMinNonFloorDist();
+            avgWallDist += analyzedFrame.GetMinNonFloorDist();
+            index++;
+            minWallPoint_ = analyzedFrame.GetMinWallPoint();
+            minFloorPoint_ = analyzedFrame.GetMinFloorPoint();
+            averagePoint_ = analyzedFrame.GetAverageXYZPoint();
+            floorDist_ = analyzedFrame.GetMinFloorDist();
+            selfPose_ = analyzedFrame.GetSelfPose();
+            averageDist_ = analyzedFrame.GetAverageDistance();
         }
-
 
         if (const auto response = tello.ReceiveResponse())
         {
+            wallDist = avgWallDist/index;
+            avgWallDist = {0.0};
+            index = 0;
             if (verboseDrone){
                 std::cout << "Tello: " << *response << std::endl;
-                std::cout << "WallDist: " << wallDist<< std::endl;
+                std::cout << "The current position:" << std::endl << selfPose_ << std::endl;
+                std::cout << "The average point:" << std::endl << averagePoint_ << std::endl;
+                std::cout << "The min floor point: " << std::endl << minFloorPoint_ << std::endl;
+                std::cout << "The min wall point: " << std::endl << minWallPoint_ << std::endl;
+                std::cout << "WallDist: " << wallDist;
+                std::cout << ", FloorDist: " << floorDist_;
+                std::cout <<", AverageDist: " << averageDist_ << std::endl;
+            //    std::cout << "Command: " << commands[idx%3] << std::endl;
             }
+
             tello.SendCommand("forward 25");
             if(verboseDrone){
                 std::cout << "Command: " << "forward 25" << std::endl;
             }
+
         }
     }
-    if (verboseDrone)
-        std::cout << "WallDist at land: " << wallDist<< std::endl;
-    tello.SendCommandWithResponse("land");
+    if (verboseDrone){
+        //std::cout << "Tello before land: " << *response << std::endl;
+        std::cout << "The current position at land:" << std::endl << selfPose_ << std::endl;
+        std::cout << "The average point at land:" << std::endl << averagePoint_ << std::endl;
+        std::cout << "The min floor point at land: " << std::endl << minFloorPoint_ << std::endl;
+        std::cout << "The min wall point at land: " << std::endl << minWallPoint_ << std::endl;
+        std::cout << "WallDist at land: " << wallDist;
+        std::cout << ", FloorDist at land: " << floorDist_;
+        std::cout <<", AverageDist at land: " << averageDist_ << std::endl;
+    }
+
+    allMapPoints = SLAM.GetMap()->GetAllMapPoints();
+    if (allMapPoints.size() > 0)
+    {
+        saveMap(1);
+    }
+
     killFrameUpdate = true;
     pthread_join(UpdThread,nullptr);
     globalCapture.release();
+    tello.SendCommand("land");
     std::cout << "tello bat: " << tello.GetBatteryStatus() << std::endl;
 
     //SLAM.SaveKeyFrameTrajectoryTUM("traject.csv");

@@ -23,6 +23,8 @@ void *UpdateFrame(void *arg)
             break;
         }
     }
+
+    return nullptr;
 }
 
 void saveCurrentPosition(cv::Mat Tcw){
@@ -93,37 +95,42 @@ cv::Mat AnalyzedFrame::ComputePoseVec(){
     cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t(); //Rotation in world coordinates
     cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3); // translation in world coordinates
 
+    //twc = XZYtoXYZ(twc);
+
     return twc;
 }
 
-cv::Mat AnalyzedFrame::XZYtoXYZ(cv::Mat vector){
 
-    cv::Mat toReturn = vector;
+cv::Mat AnalyzedFrame::FloatMatScalarMult(cv::Mat Matrix, float scalar){
+    if (Matrix.empty())
+        return Matrix;
+    cv::Mat tempMat;
+    Matrix.convertTo(tempMat,CV_64F); //convert to double
+    tempMat = tempMat * static_cast<double>(scalar);
+    tempMat.convertTo(tempMat,CV_32F);
+
+    return tempMat;
+}
+//we don't need this we'll work with the upside down RHS coordinates ORB_SLAM is using.
+/*cv::Mat AnalyzedFrame::XZYtoXYZ(cv::Mat vector){
+
+    cv::Mat toReturn=vector;
+
     toReturn.at<float>(1) += toReturn.at<float>(2); //Zpos = Z +Y
     toReturn.at<float>(2)  = toReturn.at<float>(1) - vector.at<float>(2); //Ypos = Zpos - Y = Z + Y - Y = Z   So now we have Z in Ypos and Z+Y in Zpos
     toReturn.at<float>(1) -= toReturn.at<float>(2); //Zpos = Zpos - Ypos = Z + Y - Z = Y   So they are now swapped
 
+    //toReturn = -toReturn;
+
     return toReturn;
-}
+}*/
 
 AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
 
     scale = scale_;
     std::vector<cv::Mat> pointsOnFloor;
     std::vector<cv::Mat> pointsAboveFloor;
-    cv::Mat minPoint, maxPoint;
-
-//    frameID = (SLAM->GetMap()->GetMaxKFid());
-
-//    vector<ORB_SLAM2::KeyFrame*>::iterator findFrame = std::find_if(SLAM->GetMap()->GetAllKeyFrames().begin(), SLAM->GetMap()->GetAllKeyFrames().end(),
-//                                     [this](ORB_SLAM2::KeyFrame* pKF) {return pKF->mnId == frameID;});
-
-//    unsigned long int frameIDtest = currentKeyFrame->mnFrameId;
-//    if (frameID != frameIDtest) //really really should not happen now
-//    {
-//        cerr << "We have a problem getting the correct info. The max frameID is " << frameIDtest << " and the current frameID is " << frameID;
-//        abort();
-//    }
+    //cv::Mat minPoint, maxPoint;
 
     currentKeyFrame = SLAM->GetMap()->GetLastKeyFrame(); // not using maxId because frames can be deleted. This is the last added frame.
 
@@ -131,54 +138,66 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
 
     numOfPoints = static_cast<int>(points.size());
 
-    cv::Mat selfPose = ComputePoseVec();
+    cv::Mat selfPoseUnscaled = ComputePoseVec();
+    selfPose = FloatMatScalarMult(selfPoseUnscaled,scale);
+
 
     for (set<ORB_SLAM2::MapPoint*>::iterator point_itr = points.begin(); point_itr != points.end();  ++point_itr){
-        cv::Mat point =  scale * XZYtoXYZ((*(point_itr))->GetWorldPos());
+        cv::Mat point,unscaledPoint =  (*(point_itr))->GetWorldPos();
+        point = FloatMatScalarMult(unscaledPoint,scale);
         averageXYZ += point;
         float floordist = FloorDist(point,selfPose);
+        float selfPoseYSign{1};
+        if (selfPose.at<float>(1) < 0.0f)
+            selfPoseYSign = -1;
 
-        if (point.at<float>(2) < selfPose.at<float>(2)){
+        //Y is pointing to the floor so if greater than Ydrone you are lower than drone.
+        if (point.at<float>(1) > selfPose.at<float>(1)*(1 - selfPoseYSign*0.25f)){
             numOfPointsLowerThanDrone++;
             pointsOnFloor.push_back(point);
+
+            if (floordist < minFloorDist){
+                minFloorPoint = point;
+                minFloorDist = floordist;
+            }
+            if (floordist > maxFloorDist){
+                maxFloorPoint = point;
+                maxFloorDist = floordist;
+            }
         }else{
             pointsAboveFloor.push_back(point);
             if (floordist < minNonFloorDist){
                 minNonFloorDist = floordist;
+                minWallPoint = point;
             }
         }
 
-        if (floordist < minFloorDist){
-            minPoint = point;
-            minFloorDist = floordist;
-        }
-        if (floordist > maxFloorDist){
-            maxPoint = point;
-            maxFloorDist = floordist;
-        }
+
     }//end of first run over points
 
     averageXYZ = averageXYZ/numOfPoints;
+    avgDist = FloorDist(averageXYZ,selfPose);
 
     if (numOfPoints > 1){
         // Create unit vectors of the new
         cv::Mat newCoord = cv::Mat_<float>(3,3);
-        newCoord.row(0) = (selfPose - maxPoint)/maxFloorDist;
-        newCoord.row(0).col(2) = 0.0;
-        newCoord.row(1).col(0) = - newCoord.row(0).col(1);
-        newCoord.row(1).col(1) = - newCoord.row(0).col(0);
-        newCoord.row(1).col(2) = 0.0;
-        newCoord.row(2).col(0) = 0.0;
+        newCoord.row(0) = FloatMatScalarMult(maxFloorPoint - selfPose,1/maxFloorDist);
+        newCoord.row(0).col(1) = 0.0;
+
+        newCoord.row(2).col(0) = - newCoord.row(0).col(2);
+        newCoord.row(2).col(2) = - newCoord.row(0).col(0);
         newCoord.row(2).col(1) = 0.0;
-        newCoord.row(2).col(2) = 1.0;
+
+        newCoord.row(1).col(0) = 0.0;
+        newCoord.row(1).col(1) = 1.0;
+        newCoord.row(1).col(2) = 0.0;
 
         //now we have unit vectors: x pointing from self position to max point, z up and y right hand
         //we rotate all the points to this coordinate system:
-        rotatedAveragePoint = newCoord * averageXYZ;
+        rotatedAveragePoint = newCoord * (averageXYZ - selfPose);
 
-        for (set<ORB_SLAM2::MapPoint*>::iterator point_itr = points.begin(); point_itr != points.end();  ++point_itr){
-            cv::Mat rotatedPoint =  newCoord * XZYtoXYZ((*(point_itr))->GetWorldPos())*scale;
-
+        for (vector<cv::Mat>::iterator point_itr = pointsOnFloor.begin(); point_itr != pointsOnFloor.end();  ++point_itr){
+            cv::Mat rotatedPoint =  FloatMatScalarMult(newCoord * (*point_itr - selfPose),scale);
 
             if (rotatedPoint.at<float>(0) > maxRotated.at<float>(0))
                 maxRotated.at<float>(0) = rotatedPoint.at<float>(0);
@@ -199,9 +218,9 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
 
 
             try {
-                rotatedCovariance.row(0) += xdiff * (rotatedPoint - rotatedAveragePoint).t();
-                rotatedCovariance.row(1) += ydiff * (rotatedPoint - rotatedAveragePoint).t();
-                rotatedCovariance.row(2) += zdiff * (rotatedPoint - rotatedAveragePoint).t();
+                rotatedCovariance.row(0) += FloatMatScalarMult((rotatedPoint - rotatedAveragePoint).t(),xdiff);
+                rotatedCovariance.row(1) += FloatMatScalarMult((rotatedPoint - rotatedAveragePoint).t(),ydiff);
+                rotatedCovariance.row(2) += FloatMatScalarMult((rotatedPoint - rotatedAveragePoint).t(),zdiff);
             }
             catch (const std::exception& err) {
                 std::cout << "We got a problem here: " << err.what() << std::endl;
@@ -218,6 +237,8 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
             }
 
         }//end for floor points
+
+        //TODO compute K value
 
         gapRotated = maxRotated - minRotated;
         rotatedCovariance = rotatedCovariance/(numOfPoints -1);
