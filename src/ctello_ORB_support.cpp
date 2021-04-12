@@ -152,7 +152,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
             selfPoseYSign = -1;
 
         //Y is pointing to the floor so if greater than Ydrone you are lower than drone.
-        if (point.at<float>(1) > selfPose.at<float>(1)*(1 - selfPoseYSign*0.25f)){
+        if (point.at<float>(1) < selfPose.at<float>(1)*(1 + selfPoseYSign*0.25f)){
             numOfPointsLowerThanDrone++;
             pointsOnFloor.push_back(point);
 

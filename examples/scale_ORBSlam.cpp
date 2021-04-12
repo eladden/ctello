@@ -138,7 +138,7 @@ int main(int argc, char **argv)
                          respStr.find("error") != std::string::npos)
             {
                 tello.SendCommand("land");
-                std::cerr << "Landing because of error" << std::endl;
+                std::cerr << "Landing because of error: " << response.value() << std::endl;
                 abort();
             }
 
