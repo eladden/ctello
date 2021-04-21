@@ -18,6 +18,7 @@
 #include "System.h"
 
 /************* GLOBALS ***********/
+float PI = static_cast<float>(M_PI);
 bool writeImages = true, killFrameUpdate=false;
 VideoCapture globalCapture;
 Mat globalFrame;
@@ -25,6 +26,7 @@ pthread_mutex_t frameLocker;
 std::vector<ORB_SLAM2::MapPoint*> allMapPoints;
 std::vector<ORB_SLAM2::MapPoint*> currMapPoints;
 std::string basefilename = "pointData";
+const char* const TELLO_STREAM_URL{"udp://0.0.0.0:11111?overrun_nonfatal=1&fifo_size=50000000"};
 
 const bool verboseDrone = true; //this is if you need the drone commands/replys for debug
 
@@ -44,24 +46,19 @@ void *UpdateFrame(void *arg);
 void saveCurrentPosition(cv::Mat Tcw);
 void saveMap( int fileNumber = 0);
 void saveCurrentMap();
+bool updateSLAM(cv::Mat &currentFrame_, cv::Mat &Tcw_,
+                 ORB_SLAM2::System * SLAM_);
 
 class AnalyzedFrame
 {
 protected:
-   bool isWall{false}, isGoodFrame{false}, initialized{false};
-   float maxFloorDist{0.0}, minFloorDist{1e10}, minNonFloorDist{1e10}, kValueOnFloor{0.0}, avgDist{0.0},scale{1.0};
-   cv::Mat rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           averageXYZ = (Mat_<float>(3,1) << 0, 0, 0),
-           gapRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           minRotated = (Mat_<float>(3,1) << 1e10, 1e10, 1e10),
-           maxRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           selfPose   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           minWallPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0),
-           rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
-   int numOfPoints{0}, numOfPointsLowerThanDrone{0};
-   unsigned long int frameID{0};
+
+   bool isWall, isGoodFrame, initialized;
+   float maxFloorDist, minFloorDist, minNonFloorDist, kValueOnFloor, avgDist,scale;
+   cv::Mat rotatedAveragePoint, averageXYZ, gapRotated, minRotated,
+           maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, rotatedCovariance;
+   int numOfPoints, numOfPointsLowerThanDrone;
+   unsigned long int frameID;
    ORB_SLAM2::KeyFrame* currentKeyFrame;
 
    //CV2 only knows how to multiply double scalar and double matrix. If your data structure is float you might get garbage through implicit conversions
@@ -70,16 +67,34 @@ protected:
 public:
 
    AnalyzedFrame (ORB_SLAM2::System *SLAM, float scale_);
-   ~AnalyzedFrame(){};
+   AnalyzedFrame() : isWall(false), isGoodFrame(false), initialized(false),
+                       maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
+                        numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr){
+       rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       averageXYZ = (Mat_<float>(3,1) << 0, 0, 0);
+       gapRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       minRotated = (Mat_<float>(3,1) << 1e10, 1e10, 1e10);
+       maxRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       selfPose   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       minWallPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
+
+   }
+   ~AnalyzedFrame(){}
 
    cv::Mat ComputePoseVec();
    float FloorDist(cv::Mat point1, cv::Mat point2){
        return std::sqrt(std::pow(point1.at<float>(0) - point2.at<float>(0),2.0f) + std::pow(point1.at<float>(2) - point2.at<float>(2),2.0f) );
    }
 
+   float K_function(std::vector<cv::Mat> points, float area, float search_radius);
+   bool ArePointsScattered(std::vector<cv::Mat> points, float area, float search_radius, float epsilon);
    //static cv::Mat XZYtoXYZ(cv::Mat vector);
 
    bool GetIsWall(){return isWall;}
+   void SetIsWall(bool value) {isWall = value;}
    bool GetIsGoodFrame(){return isGoodFrame;}
    bool GetInitialized(){return initialized;}
    float GetMaxFloorDist(){return maxFloorDist;}

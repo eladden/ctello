@@ -43,31 +43,6 @@ using cv::imshow;
 using cv::VideoCapture;
 using cv::waitKey;
 
-bool updateSLAM(cv::Mat &currentFrame_, cv::Mat &Tcw_,
-                 ORB_SLAM2::System * SLAM_){
-
-    double currentFrameMilisecondPos;
-    bool gotNewFrame = false;
-    pthread_mutex_lock(&frameLocker);
-    currentFrame_ = globalFrame;
-    currentFrameMilisecondPos = globalCapture.get(cv::CAP_PROP_POS_MSEC);
-    pthread_mutex_unlock(&frameLocker);
-
-    if(currentFrame_.empty()){
-        gotNewFrame = false;
-    }
-    else{
-        gotNewFrame = true;
-    }
-    if (gotNewFrame){
-        try {
-            Tcw_ = SLAM_->TrackMonocular(currentFrame_,currentFrameMilisecondPos);
-        } catch (const std::exception& e) {
-            cout << "ORBSLAM error: " << e.what();
-        }
-    }
-    return gotNewFrame;
-}
 
 int main(int argc, char **argv)
 {
@@ -303,6 +278,7 @@ int main(int argc, char **argv)
 
 
         gotNewFrame = updateSLAM(currentFrame,Tcw,&SLAM);
+
         if (gotNewFrame){
             AnalyzedFrame analyzedFrame(&SLAM,scale);
             avgWallDist += analyzedFrame.GetMinNonFloorDist();

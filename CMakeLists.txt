@@ -67,6 +67,17 @@ target_link_libraries(ORB_SLAM2
         ${ORB_SLAM2_DIR}/Thirdparty/g2o/lib/libg2o.so
         )
 
+# CTello Shared Control Library =======================================================
+
+add_library(Control SHARED src/ctello_control.cpp)
+
+target_include_directories(Control PRIVATE include)
+target_link_libraries(Control ctello ${Pangolin_LIBRARIES})
+target_link_libraries(Control ${OpenCV_LIBS} ORB_SLAM2)
+
+install(TARGETS Control DESTINATION lib)
+install(FILES include/ctello_control.h DESTINATION include)
+
 # CTello Shared Library =======================================================
 
 add_library(ctello SHARED src/ctello.cpp)
@@ -109,25 +120,31 @@ target_link_libraries(ctello-stream ${OpenCV_LIBS})
 
 install(TARGETS ctello-stream DESTINATION bin)
 
-
 # CTello Examples =============================================================
 
 ## Scan Room --------------------------------------------------------------------
-add_executable(scan_room examples/scan_room.cpp)
+#add_executable(scan_room examples/scan_room.cpp)
 
-target_include_directories(scan_room PRIVATE include)
+#target_include_directories(scan_room PRIVATE include)
 
-target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
-target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2)
+#target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
+#target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2)
 
 ## Scale --------------------------------------------------------------------
-add_executable(scale_ORBSlam examples/scale_ORBSlam.cpp)
+#add_executable(scale_ORBSlam examples/scale_ORBSlam.cpp)
 
-target_include_directories(scale_ORBSlam PRIVATE include)
+#target_include_directories(scale_ORBSlam PRIVATE include)
 
-target_link_libraries(scale_ORBSlam ctello ${Pangolin_LIBRARIES})
-target_link_libraries(scale_ORBSlam ${OpenCV_LIBS} ORB_SLAM2)
+#target_link_libraries(scale_ORBSlam ctello ${Pangolin_LIBRARIES})
+#target_link_libraries(scale_ORBSlam ${OpenCV_LIBS} ORB_SLAM2)
 
+## Scan Hall -----------------------------------------------------------------
+add_executable(scan_Hall examples/scan_Hall.cpp)
+
+target_include_directories(scan_Hall PRIVATE include)
+
+target_link_libraries(scan_Hall ctello ${Pangolin_LIBRARIES})
+target_link_libraries(scan_Hall ${OpenCV_LIBS} ORB_SLAM2 Control)
 ## Flip -----------------------------------------------------------------------
 add_executable(flip examples/flip.cpp)
 

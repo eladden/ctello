@@ -23,7 +23,7 @@
 #include "opencv2/highgui.hpp"
 #include "opencv2/imgcodecs.hpp"
 
-const char* const TELLO_STREAM_URL{"udp://0.0.0.0:11111"};
+const char* const TELLO_STREAM_URL{"udp://@0.0.0.0:11111"};
 
 using ctello::Tello;
 using cv::CAP_FFMPEG;
@@ -52,7 +52,7 @@ int main()
     bool busy{false};
     while (true)
     {
-        // See surrounding.
+         //See surrounding.
 //        cv::Mat frame;
 //        capture >> frame;
 

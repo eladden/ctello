@@ -111,6 +111,32 @@ cv::Mat AnalyzedFrame::FloatMatScalarMult(cv::Mat Matrix, float scalar){
 
     return tempMat;
 }
+
+bool updateSLAM(cv::Mat &currentFrame_, cv::Mat &Tcw_,
+                 ORB_SLAM2::System * SLAM_){
+
+    double currentFrameMilisecondPos;
+    bool gotNewFrame = false;
+    pthread_mutex_lock(&frameLocker);
+    currentFrame_ = globalFrame;
+    currentFrameMilisecondPos = globalCapture.get(cv::CAP_PROP_POS_MSEC);
+    pthread_mutex_unlock(&frameLocker);
+
+    if(currentFrame_.empty()){
+        gotNewFrame = false;
+    }
+    else{
+        gotNewFrame = true;
+    }
+    if (gotNewFrame){
+        try {
+            Tcw_ = SLAM_->TrackMonocular(currentFrame_,currentFrameMilisecondPos);
+        } catch (const std::exception& e) {
+            cout << "ORBSLAM error: " << e.what();
+        }
+    }
+    return gotNewFrame;
+}
 //we don't need this we'll work with the upside down RHS coordinates ORB_SLAM is using.
 /*cv::Mat AnalyzedFrame::XZYtoXYZ(cv::Mat vector){
 
@@ -125,8 +151,52 @@ cv::Mat AnalyzedFrame::FloatMatScalarMult(cv::Mat Matrix, float scalar){
     return toReturn;
 }*/
 
-AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
+float AnalyzedFrame::K_function(std::vector<cv::Mat> points, float area, float search_radius){
+    unsigned long numOfPoints = points.size();
+    int pointsInRadius{0};
+    float dij;
 
+    if (numOfPoints == 0 || area < 1e-5f)
+        return std::numeric_limits<double>::infinity();
+    float Lamb = numOfPoints/area;
+
+    for(std::vector<cv::Mat>::iterator points_itr1 = points.begin(); points_itr1 != points.end()-1; ++points_itr1){
+        for (std::vector<cv::Mat>::iterator points_itr2 = points_itr1 +1; points_itr2 != points.end(); ++points_itr2){
+            dij = FloorDist(*points_itr1,*points_itr2);
+            if (dij < search_radius)
+                ++pointsInRadius;
+        }
+    }
+
+    return pointsInRadius/(Lamb * numOfPoints);//This is the K value
+}
+
+bool AnalyzedFrame::ArePointsScattered(std::vector<cv::Mat> points, float area, float search_radius, float epsilon){
+    float K = K_function(points,area,search_radius);
+    if (K < (PI * std::pow(search_radius ,2.0f)*(1.0f+epsilon)) ){
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
+    isWall(false), isGoodFrame(false), initialized(false),
+                           maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
+                            numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr)
+{
+    rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    averageXYZ = (Mat_<float>(3,1) << 0, 0, 0);
+    gapRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    minRotated = (Mat_<float>(3,1) << 1e10, 1e10, 1e10);
+    maxRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    selfPose   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    minWallPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
+    float area,search_radius;
     scale = scale_;
     std::vector<cv::Mat> pointsOnFloor;
     std::vector<cv::Mat> pointsAboveFloor;
@@ -242,6 +312,13 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_){
 
         gapRotated = maxRotated - minRotated;
         rotatedCovariance = rotatedCovariance/(numOfPoints -1);
+
+        area = PI * (gapRotated.at<float>(0)/2) * (gapRotated.at<float>(2)/2);
+        search_radius = ((std::sqrt(rotatedCovariance.at<float>(0,0)) + std::sqrt(rotatedCovariance.at<float>(2,2)))/2.0f) * 0.1f;
+
+        kValueOnFloor = K_function(pointsOnFloor,area,search_radius);
+
+
     }//end If have any points on floor
     else isGoodFrame = false;
 
