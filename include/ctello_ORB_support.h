@@ -56,10 +56,11 @@ protected:
    bool isWall, isGoodFrame, initialized;
    float maxFloorDist, minFloorDist, minNonFloorDist, kValueOnFloor, avgDist,scale;
    cv::Mat rotatedAveragePoint, averageXYZ, gapRotated, minRotated,
-           maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, rotatedCovariance;
+           maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, maxFloorPointRotated, rotatedCovariance;
    int numOfPoints, numOfPointsLowerThanDrone;
    unsigned long int frameID;
    ORB_SLAM2::KeyFrame* currentKeyFrame;
+   set<ORB_SLAM2::MapPoint*> allPoints;//,pointsAbove,pointsBelow;
 
    //CV2 only knows how to multiply double scalar and double matrix. If your data structure is float you might get garbage through implicit conversions
    cv::Mat FloatMatScalarMult(cv::Mat Matrix, float scalar);
@@ -79,6 +80,7 @@ public:
        minWallPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       maxFloorPointRotated   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
 
    }
@@ -107,11 +109,14 @@ public:
    cv::Mat GetRotatedCovariance(){return rotatedCovariance;}
    cv::Mat GetSelfPose(){return selfPose;}
    cv::Mat GetMaxFloorPoint(){return maxFloorPoint;}
+   cv::Mat GetMaxmaxFloorPointRotated(){return maxFloorPointRotated;}
    cv::Mat GetMinFloorPoint(){return minFloorPoint;}
    cv::Mat GetMinWallPoint(){return minWallPoint;}
    int GetNumOfPoints(){return numOfPoints;}
-   int GetnumOfPointsLowerThanDrone(){return numOfPointsLowerThanDrone;}
+   int GetNumOfPointsLowerThanDrone(){return numOfPointsLowerThanDrone;}
    int GetFrameID(){return frameID;}
+
+   void saveFramePoints(string filename);
 };
 
 #endif // CTELLO_ORB_SUPPORT_H

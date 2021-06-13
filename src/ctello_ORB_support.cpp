@@ -89,6 +89,28 @@ void saveCurrentMap(){
     currentPointData.close();
 }
 
+void AnalyzedFrame::saveFramePoints(std::string filename){
+
+
+    std::ofstream currentPointData;
+    currentPointData.open(filename + ".csv");
+    for(auto p : allPoints) {
+        auto frame = p->GetReferenceKeyFrame();
+        int frameId = static_cast<int>(frame->mnFrameId);
+        cv::Mat Tcw = frame->GetPose();
+        auto point = p->GetWorldPos();
+        cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
+        cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+        auto q = ORB_SLAM2::Converter::toQuaternion(Rwc);
+        Eigen::Matrix<double, 3, 1> v = ORB_SLAM2::Converter::toVector3d(point);
+        currentPointData << v.x() << "," << v.y() << "," << v.z()<< "," << q[0]
+        << "," << q[1]<< "," << q[2]<< "," << q[3] << "," << frameId <<
+        ","<< twc.at<float>(0)  << "," << twc.at<float>(1)  << "," << twc.at<float>(2) << std::endl;
+    }
+
+    currentPointData.close();
+}
+
 cv::Mat AnalyzedFrame::ComputePoseVec(){
 
     cv::Mat Tcw = currentKeyFrame->GetPose(); //Position homogenious mat.
@@ -195,8 +217,9 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
     minWallPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
     minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
     maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+    maxFloorPointRotated   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
     rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
-    float area,search_radius;
+    float area,search_radius,wallMin1{1e10},wallMin2{1e10},wallMin3{1e10};
     scale = scale_;
     std::vector<cv::Mat> pointsOnFloor;
     std::vector<cv::Mat> pointsAboveFloor;
@@ -205,6 +228,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
     currentKeyFrame = SLAM->GetMap()->GetLastKeyFrame(); // not using maxId because frames can be deleted. This is the last added frame.
 
     set<ORB_SLAM2::MapPoint*> points = currentKeyFrame->GetMapPoints();
+    allPoints = points;
 
     numOfPoints = static_cast<int>(points.size());
 
@@ -222,7 +246,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
             selfPoseYSign = -1;
 
         //Y is pointing to the floor so if greater than Ydrone you are lower than drone.
-        if (point.at<float>(1) < selfPose.at<float>(1)*(1 + selfPoseYSign*0.25f)){
+        if (point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign - 5.0f){
             numOfPointsLowerThanDrone++;
             pointsOnFloor.push_back(point);
 
@@ -236,9 +260,26 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
             }
         }else{
             pointsAboveFloor.push_back(point);
-            if (floordist < minNonFloorDist){
-                minNonFloorDist = floordist;
-                minWallPoint = point;
+            if ((point.at<float>(1)*selfPoseYSign > selfPose.at<float>(1)*selfPoseYSign && //- 5.0f &&
+                    point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign + 25.0f)){
+                bool updatedMin{false};
+                if (floordist < wallMin1){
+                    wallMin1 = floordist;
+                    minWallPoint = point;
+                    updatedMin = true;
+                }
+                else if (floordist < wallMin2){
+                    wallMin2 = floordist;
+                    updatedMin = true;
+                }
+                else if (floordist < wallMin3){
+                    wallMin3 = floordist;
+                    updatedMin = true;
+                }
+                if (updatedMin){
+                    minNonFloorDist = (wallMin1 + wallMin2 + wallMin3)/3;
+                }
+
             }
         }
 
@@ -265,6 +306,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
         //now we have unit vectors: x pointing from self position to max point, z up and y right hand
         //we rotate all the points to this coordinate system:
         rotatedAveragePoint = newCoord * (averageXYZ - selfPose);
+        maxFloorPointRotated = newCoord * (maxFloorPoint - selfPose);
 
         for (vector<cv::Mat>::iterator point_itr = pointsOnFloor.begin(); point_itr != pointsOnFloor.end();  ++point_itr){
             cv::Mat rotatedPoint =  FloatMatScalarMult(newCoord * (*point_itr - selfPose),scale);

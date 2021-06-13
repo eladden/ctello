@@ -7,11 +7,12 @@
 
 class ORBDrone
 {
+
     ORB_SLAM2::System *SLAM;
     ctello::Tello *Drone;
     AnalyzedFrame currentAnalyzedFrame;
     pthread_t UpdThread;
-    float scale;
+    float scale, currentWallDist;
     bool writeImages,initialized;
     std::chrono::time_point<std::chrono::system_clock> actionSent;
 
@@ -19,6 +20,7 @@ class ORBDrone
 public:
 
     enum DroneState{
+        Seeking=2,
         OK=1,
         Lost=-1,
         TooCloseToWall=0
@@ -27,11 +29,15 @@ public:
     ORBDrone(char* vocPath, char* settingsPath);
     ~ORBDrone();
 
+    //These are parameters optimized
+    void SetOptParams(float epsilon_for_Ripples, float search_radius1_param, float search_radius2_param, float floatthreshold, float min_num_of_points);
+
     DroneState Scan(bool cw, float maxAngle);
-    DroneState SeekFloor(bool we, maxAngle);
-    DroneState AdvanceForward(float distFromWall);
-    bool IsAWall_Opt(AnalyzedFrame FrameInfo);
-    bool IsAWall_Tree(AnalyzedFrame FrameInfo);
+    DroneState SeekFloor(bool cw, float maxAngle);
+    DroneState AdvanceForward(float distFromWall, int step);
+    //bool IsAWall_Opt(AnalyzedFrame FrameInfo);
+    bool IsAWall(AnalyzedFrame FrameInfo);
+
 
     void ReScanLostSLAM();
     void ScanHall();
@@ -49,7 +55,8 @@ public:
 
 
 
-
+private:
+    float ComputeMSD(float number);
 };
 
 #endif // CTELLO_CONTROL_H

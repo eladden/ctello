@@ -45,14 +45,15 @@ int main(int argc, char **argv)
     if (verboseDrone) std::cout<< "Done ! scale is: " << Drone.GetScale() << std::endl;
     int i=0, iterations=5;
 
-    //This is a Odesius-like method, go until you're close to the wall, then turn then go forward again.
     while (i < iterations){
-        droneState = Drone.AdvanceForward(100.0f, 37);
-
-        if (droneState == ORBDrone::DroneState::TooCloseToWall){
-            Drone.GetCurrentAnalyzedFrame().saveFramePoints("PointData" + std::to_string(i));
+        droneState = Drone.SeekFloor(cw,380.0f);
+        //TODO if not wall then what
+        if (droneState == ORBDrone::DroneState::Seeking){
+            std::cout<< "could not find a good direction to go to, trying again"<<std::endl;
             i++;
-            Drone.Scan(cw,70);
+        }
+        if (droneState == ORBDrone::DroneState::OK){//This means that the drone is currently not looking at a wall and is facing the far point
+            droneState = Drone.AdvanceForward(100.0f, 37); //advance, while making sure this really is not a wall
         }
         else if (droneState == ORBDrone::DroneState::Lost){
             Drone.Scan(!cw,25);
