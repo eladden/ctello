@@ -147,12 +147,12 @@ target_link_libraries(scan_Hall ctello ${Pangolin_LIBRARIES})
 target_link_libraries(scan_Hall ${OpenCV_LIBS} ORB_SLAM2 Control)
 
 ## Scan Hall -----------------------------------------------------------------
-add_executable(scan_Hall_intelligent examples/scan_Hall_intelligent.cpp)
+#add_executable(scan_Hall_intelligent examples/scan_Hall_intelligent.cpp)
 
-target_include_directories(scan_Hall_intelligent PRIVATE include)
+#target_include_directories(scan_Hall_intelligent PRIVATE include)
 
-target_link_libraries(scan_Hall_intelligent ctello ${Pangolin_LIBRARIES})
-target_link_libraries(scan_Hall_intelligent ${OpenCV_LIBS} ORB_SLAM2 Control)
+#target_link_libraries(scan_Hall_intelligent ctello ${Pangolin_LIBRARIES})
+#target_link_libraries(scan_Hall_intelligent ${OpenCV_LIBS} ORB_SLAM2 Control)
 ## Flip -----------------------------------------------------------------------
 add_executable(flip examples/flip.cpp)
 

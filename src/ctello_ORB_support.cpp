@@ -204,7 +204,7 @@ bool AnalyzedFrame::ArePointsScattered(std::vector<cv::Mat> points, float area, 
 }
 
 AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
-    isWall(false), isGoodFrame(false), initialized(false),
+    isWall(false), isGoodFrame(false), initialized(false), closedLoop(false),
                            maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
                             numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr)
 {
@@ -238,6 +238,9 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
 
     for (set<ORB_SLAM2::MapPoint*>::iterator point_itr = points.begin(); point_itr != points.end();  ++point_itr){
         cv::Mat point,unscaledPoint =  (*(point_itr))->GetWorldPos();
+        if ((*(point_itr))->mnCorrectedByKF !=0 || (*(point_itr))->mnLoopPointForKF != 0 || (*(point_itr))->mnCorrectedReference !=0){
+            closedLoop = true;
+        }
         point = FloatMatScalarMult(unscaledPoint,scale);
         averageXYZ += point;
         float floordist = FloorDist(point,selfPose);
@@ -260,8 +263,8 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
             }
         }else{
             pointsAboveFloor.push_back(point);
-            if ((point.at<float>(1)*selfPoseYSign > selfPose.at<float>(1)*selfPoseYSign && //- 5.0f &&
-                    point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign + 25.0f)){
+            if (point.at<float>(1)*selfPoseYSign > selfPose.at<float>(1)*selfPoseYSign && //- 5.0f &&
+                    point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign + 25.0f){
                 bool updatedMin{false};
                 if (floordist < wallMin1){
                     wallMin1 = floordist;

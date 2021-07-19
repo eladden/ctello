@@ -53,7 +53,7 @@ class AnalyzedFrame
 {
 protected:
 
-   bool isWall, isGoodFrame, initialized;
+   bool isWall, isGoodFrame, initialized,closedLoop;
    float maxFloorDist, minFloorDist, minNonFloorDist, kValueOnFloor, avgDist,scale;
    cv::Mat rotatedAveragePoint, averageXYZ, gapRotated, minRotated,
            maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, maxFloorPointRotated, rotatedCovariance;
@@ -68,7 +68,7 @@ protected:
 public:
 
    AnalyzedFrame (ORB_SLAM2::System *SLAM, float scale_);
-   AnalyzedFrame() : isWall(false), isGoodFrame(false), initialized(false),
+   AnalyzedFrame() : isWall(false), isGoodFrame(false), initialized(false), closedLoop(false),
                        maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
                         numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr){
        rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
@@ -99,6 +99,7 @@ public:
    void SetIsWall(bool value) {isWall = value;}
    bool GetIsGoodFrame(){return isGoodFrame;}
    bool GetInitialized(){return initialized;}
+   bool GetClosedLoop(){return closedLoop;}
    float GetMaxFloorDist(){return maxFloorDist;}
    float GetMinFloorDist(){return minFloorDist;}
    float GetMinKValueOnFloor(){return kValueOnFloor;}

@@ -32,9 +32,9 @@ public:
     //These are parameters optimized
     void SetOptParams(float epsilon_for_Ripples, float search_radius1_param, float search_radius2_param, float floatthreshold, float min_num_of_points);
 
-    DroneState Scan(bool cw, float maxAngle);
+    DroneState Turn(bool cw, float maxAngle);
     DroneState SeekFloor(bool cw, float maxAngle);
-    DroneState AdvanceForward(float distFromWall, int step);
+    DroneState AdvanceForward(float distFromWall, int step, float maxDist);
     //bool IsAWall_Opt(AnalyzedFrame FrameInfo);
     bool IsAWall(AnalyzedFrame FrameInfo);
 
@@ -44,11 +44,14 @@ public:
     bool SetScale();
 
     AnalyzedFrame GetCurrentAnalyzedFrame(){return currentAnalyzedFrame;}
+    void SetCurrentAnalyzedFrame(AnalyzedFrame value){currentAnalyzedFrame = value;}
     ORB_SLAM2::System* GetSLAM(){return SLAM;}
     ctello::Tello* GetDrone(){return Drone;}
     float GetScale(){return scale;}
     bool GetWriteImages(){return writeImages;}
     void SetWriteImages(bool value) {writeImages = value;}
+    float GetCurrentWallDist(){return currentWallDist;}
+    void SetCurrentWallDist(float value) {currentWallDist = value;}
 
     std::optional<string> GotDroneResponse();
     void SendCommand(std::string command);

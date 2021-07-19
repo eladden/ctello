@@ -53,7 +53,8 @@ int main(int argc, char **argv)
             i++;
         }
         if (droneState == ORBDrone::DroneState::OK){//This means that the drone is currently not looking at a wall and is facing the far point
-            droneState = Drone.AdvanceForward(100.0f, 37); //advance, while making sure this really is not a wall
+            Drone.SetCurrentWallDist(1e10);
+            droneState = Drone.AdvanceForward(100.0f, 37,400); //advance, while making sure this really is not a wall
         }
         else if (droneState == ORBDrone::DroneState::Lost){
             Drone.Scan(!cw,25);
