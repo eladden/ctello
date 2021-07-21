@@ -203,10 +203,10 @@ bool AnalyzedFrame::ArePointsScattered(std::vector<cv::Mat> points, float area, 
     }
 }
 
-AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
+AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_, float selfPoseYSign):
     isWall(false), isGoodFrame(false), initialized(false), closedLoop(false),
                            maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
-                            numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr)
+                            numOfPoints(0), numOfPointsLowerThanDrone(0),numOfPointsHeigherThanDrone(0), frameID(0), currentKeyFrame(nullptr)
 {
     rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
     averageXYZ = (Mat_<float>(3,1) << 0, 0, 0);
@@ -244,9 +244,9 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
         point = FloatMatScalarMult(unscaledPoint,scale);
         averageXYZ += point;
         float floordist = FloorDist(point,selfPose);
-        float selfPoseYSign{1};
-        if (selfPose.at<float>(1) < 0.0f)
-            selfPoseYSign = -1;
+//        float selfPoseYSign{1};
+//        if (selfPose.at<float>(1) < 0.0f)
+//            selfPoseYSign = -1;
 
         //Y is pointing to the floor so if greater than Ydrone you are lower than drone.
         if (point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign - 5.0f){
@@ -263,6 +263,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_):
             }
         }else{
             pointsAboveFloor.push_back(point);
+            numOfPointsHeigherThanDrone++;
             if (point.at<float>(1)*selfPoseYSign > selfPose.at<float>(1)*selfPoseYSign && //- 5.0f &&
                     point.at<float>(1)*selfPoseYSign < selfPose.at<float>(1)*selfPoseYSign + 25.0f){
                 bool updatedMin{false};

@@ -40,7 +40,7 @@ int main(int argc, char **argv)
     ORBDrone::DroneState droneState = ORBDrone::DroneState::Lost;
     cv::Mat currentFrame, Tcw, currentPosition, previousPosition;
     const bool cw = false;//When in lab set to false
-    float turneAngle = 20, keepDistanceFromWall = 140.0f, maxAdvanceDist = 400.0f,wallDist{1e10},movedDist{0.0};
+    float turneAngle = 20, keepDistanceFromWall = 130.0f, maxAdvanceDist = 400.0f,wallDist{1e10},movedDist{0.0};
     int step = 40;
     bool needToFindWall = false;
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     if (verboseDrone) std::cout<< "Done ! scale is: " << Drone.GetScale() << std::endl;
     int i=0, iterations=3,getBackIterations = 3;
 
-    AnalyzedFrame analyzedFrame_(Drone.GetSLAM(),Drone.GetScale());
+    AnalyzedFrame analyzedFrame_(Drone.GetSLAM(),Drone.GetScale(),Drone.GetSelfPoseYSign());
     previousPosition = analyzedFrame_.GetSelfPose();
     if (verboseDrone)
         cout << "current postition: " << std::endl << previousPosition <<  std::endl;
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
         std::cout << "Scanning..." << std::endl;
 
         while (true){
-            AnalyzedFrame analyzedFrame(Drone.GetSLAM(),Drone.GetScale());
+            AnalyzedFrame analyzedFrame(Drone.GetSLAM(),Drone.GetScale(),Drone.GetSelfPoseYSign());
             if (analyzedFrame.GetClosedLoop()){
                 if (verboseDrone) std::cout<< "Closed Loop Detected, rescaling...";
                 Drone.SetScale();
@@ -84,6 +84,7 @@ int main(int argc, char **argv)
                 break;
 
             if (droneState == ORBDrone::DroneState::TooCloseToWall){
+                std::cout << "saving as PointData" << std::to_string(i) << std::endl;
                 Drone.GetCurrentAnalyzedFrame().saveFramePoints("PointData" + std::to_string(i));
                 Drone.SetCurrentWallDist(1e10);
                 i++;
@@ -91,7 +92,7 @@ int main(int argc, char **argv)
             }
             else if (droneState == ORBDrone::DroneState::Lost){
                 Drone.Turn(!cw,25);
-                Drone.Turn(cw,25);
+                //Drone.Turn(cw,25);
             }/*else{//This should happen when the state is not too close and not lost, i.e., still ok, we went the maxadvanced
                 //continue;
                 needToFindWall = true;
@@ -106,7 +107,7 @@ int main(int argc, char **argv)
             ++i;
             // the state in the turn does not check closeness so we need to check distance from wall manually
             while (!updateSLAM(currentFrame,Tcw,Drone.GetSLAM()));
-            AnalyzedFrame analyzedFrame(Drone.GetSLAM(),Drone.GetScale());
+            AnalyzedFrame analyzedFrame(Drone.GetSLAM(),Drone.GetScale(), Drone.GetSelfPoseYSign());
             wallDist = analyzedFrame.GetMinNonFloorDist();
             Drone.SetCurrentAnalyzedFrame(analyzedFrame);
 

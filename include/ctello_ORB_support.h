@@ -57,7 +57,7 @@ protected:
    float maxFloorDist, minFloorDist, minNonFloorDist, kValueOnFloor, avgDist,scale;
    cv::Mat rotatedAveragePoint, averageXYZ, gapRotated, minRotated,
            maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, maxFloorPointRotated, rotatedCovariance;
-   int numOfPoints, numOfPointsLowerThanDrone;
+   int numOfPoints, numOfPointsLowerThanDrone, numOfPointsHeigherThanDrone;
    unsigned long int frameID;
    ORB_SLAM2::KeyFrame* currentKeyFrame;
    set<ORB_SLAM2::MapPoint*> allPoints;//,pointsAbove,pointsBelow;
@@ -67,10 +67,10 @@ protected:
 
 public:
 
-   AnalyzedFrame (ORB_SLAM2::System *SLAM, float scale_);
+   AnalyzedFrame (ORB_SLAM2::System *SLAM, float scale_, float selfPoseYSign);
    AnalyzedFrame() : isWall(false), isGoodFrame(false), initialized(false), closedLoop(false),
                        maxFloorDist(0.0), minFloorDist(1e10), minNonFloorDist(1e10), kValueOnFloor(0.0), avgDist(0.0), scale(1.0),
-                        numOfPoints(0), numOfPointsLowerThanDrone(0), frameID(0), currentKeyFrame(nullptr){
+                        numOfPoints(0), numOfPointsLowerThanDrone(0), numOfPointsHeigherThanDrone(0),frameID(0), currentKeyFrame(nullptr){
        rotatedAveragePoint = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        averageXYZ = (Mat_<float>(3,1) << 0, 0, 0);
        gapRotated = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
@@ -115,6 +115,7 @@ public:
    cv::Mat GetMinWallPoint(){return minWallPoint;}
    int GetNumOfPoints(){return numOfPoints;}
    int GetNumOfPointsLowerThanDrone(){return numOfPointsLowerThanDrone;}
+   int GetNumOfPointsHeigherThanDrone(){return numOfPointsHeigherThanDrone;}
    int GetFrameID(){return frameID;}
 
    void saveFramePoints(string filename);

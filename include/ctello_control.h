@@ -12,7 +12,7 @@ class ORBDrone
     ctello::Tello *Drone;
     AnalyzedFrame currentAnalyzedFrame;
     pthread_t UpdThread;
-    float scale, currentWallDist;
+    float scale, currentWallDist,selfPoseYSign;
     bool writeImages,initialized;
     std::chrono::time_point<std::chrono::system_clock> actionSent;
 
@@ -48,6 +48,7 @@ public:
     ORB_SLAM2::System* GetSLAM(){return SLAM;}
     ctello::Tello* GetDrone(){return Drone;}
     float GetScale(){return scale;}
+    float GetSelfPoseYSign(){return selfPoseYSign;}
     bool GetWriteImages(){return writeImages;}
     void SetWriteImages(bool value) {writeImages = value;}
     float GetCurrentWallDist(){return currentWallDist;}

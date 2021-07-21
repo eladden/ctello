@@ -12,6 +12,7 @@ ORBDrone::~ORBDrone(){
 
 ORBDrone::ORBDrone(char *vocPath, char *settingsPath){
     scale = 0.0;
+    selfPoseYSign = 1.0;
     currentWallDist = 1e10f;
     bool debug = false;
     int buffer = 0;
@@ -112,6 +113,7 @@ ORBDrone::ORBDrone(char *vocPath, char *settingsPath){
 
     }//end while loop
 }
+
 
 ORBDrone::DroneState ORBDrone::Turn(bool cw,float maxAngleDegrees){
     float maxAngle = maxAngleDegrees*PI/180.0f;
@@ -271,7 +273,7 @@ bool ORBDrone::SetScale(){
     float previousHeightSLAM{0}, currentHeightSLAM{0}, previousHeightDrone{0}, currentHeightDrone{0};//, initialHeightDrone{0}, initialHeightSLAM{0};
     float MSD{100};
     //float scaleFromInit{0}, scale{0};
-    bool busy{false},gotNewFrame{false},done{false};
+    bool gotNewFrame{false},done{false},busy = !GotDroneResponse().has_value();
     cv::Mat currentFrame;
     cv::Mat Tcw;
 
@@ -384,6 +386,12 @@ bool ORBDrone::SetScale(){
 //                    if (verboseDrone){
 //                        std::cout << "Updating scale value" << std::endl;
 //                    }
+                    if (index == 3){// The index is raised when the comman is given, so the last command was with index 2 which means up.
+                                    // Up will be the command given when the next Sendcommand is issued.
+                                    // This means the current height was calculated after moving Down, and is supposed to be lower than the previous hight
+                        if (currentHeightSLAM > previousHeightSLAM) selfPoseYSign = -1;
+
+                    }
                     scale += std::abs(currentHeightDrone - previousHeightDrone)/std::abs(currentHeightSLAM - previousHeightSLAM);
                     scaleCounter++;
                 }
@@ -400,7 +408,7 @@ bool ORBDrone::SetScale(){
                 busy = true;
 
             }
-        }
+        }//End if not busy and not done
         busy = !GotDroneResponse().has_value();
     }//End of scaling loop
     return false;
@@ -408,8 +416,9 @@ bool ORBDrone::SetScale(){
 
 ORBDrone::DroneState ORBDrone::AdvanceForward(float distFromWall, int step=50, float maxDist = 400){
     float wallDist = currentWallDist, movedDist{0};
+    int numOfPointsHeigherThanDrone{0};
     std::string stepString = to_string(step), command;
-    bool debug = false;
+    //bool debug = false;
     //int badDistCounter{0};
     //int index = 0;
     if (verboseDrone)
@@ -423,8 +432,6 @@ ORBDrone::DroneState ORBDrone::AdvanceForward(float distFromWall, int step=50, f
     bool allOK{true},gotNewFrame{false}, busy{false};
     while (allOK){
 
-        if (debug)
-            cout << "a...";
         if (SLAM->GetTrackingState()==ORB_SLAM2::Tracking::LOST){
             if (verboseDrone) std::cout<< "Lost ORB SLAM" << std::endl;
             return DroneState::Lost;
@@ -432,44 +439,20 @@ ORBDrone::DroneState ORBDrone::AdvanceForward(float distFromWall, int step=50, f
 
         gotNewFrame = updateSLAM(currentFrame,Tcw,SLAM);
 
-        if (debug)
-            cout << "b...";
         if (!busy)
         {
-            if (debug)
-                cout << "c...";
+
             while (!gotNewFrame){
                 gotNewFrame = updateSLAM(currentFrame,Tcw,SLAM);
             }
-            if (debug)
-                cout << "d...";
-            AnalyzedFrame analyzedFrame(SLAM,scale);
+
+            AnalyzedFrame analyzedFrame(SLAM,scale, selfPoseYSign);
             wallDist = analyzedFrame.GetMinNonFloorDist();
+            numOfPointsHeigherThanDrone = analyzedFrame.GetNumOfPointsHeigherThanDrone();
             currentAnalyzedFrame = analyzedFrame;
 
-            if (debug)
-                cout << "e...";
-
-
-            /*if (wallDist > 1e8f || badDistCounter > 0){ // this does not make sense, we need to get rid of this if it persists
-                badDistCounter++;
-                if (badDistCounter == 1){
-                    GetCurrentAnalyzedFrame().saveFramePoints("GotStuckHere");
-                    busy = false;
-                    SendCommand("up 25");
-                }else if (badDistCounter == 2){
-                    busy = false;
-                    SendCommand("down 25");
-                }
-                if (badDistCounter ==3){
-                    badDistCounter = 0;
-                }
-                continue;
-            }*/
-
-
-            if (debug)
-                cout << "f...";
+            if (numOfPointsHeigherThanDrone <= 3)
+                return DroneState::Lost;
 
             // The 1e-5 is to prevent from a case where no frame is found and
             // you get wall distance 0.0 which makes no sense.
@@ -490,8 +473,7 @@ ORBDrone::DroneState ORBDrone::AdvanceForward(float distFromWall, int step=50, f
                     return DroneState::OK;
                 }
 
-            if (debug)
-                cout << "g...";
+
 
             if (verboseDrone){
                 std::cout << "WallDist: " << wallDist << std::endl;
@@ -500,28 +482,15 @@ ORBDrone::DroneState ORBDrone::AdvanceForward(float distFromWall, int step=50, f
                 //std::cout << "current position: " << std::endl << analyzedFrame.GetSelfPose() << std::endl;
             }
 
-            if (debug)
-                cout << "h...";
-
             SendCommand("forward " + stepString);
             movedDist += step;
 
-            if (debug)
-                cout << "i...";
-
         }//end if not busy
 
-        if (debug)
-            cout << "j...";
 
         busy = !GotDroneResponse().has_value();
 
-        if (debug)
-            cout << "k...";
-
     }//end main loop
-    if (debug)
-        cout << "FIN!" << std::endl;
     currentWallDist = wallDist;
     return DroneState::OK;
 }
@@ -614,7 +583,7 @@ ORBDrone::DroneState ORBDrone::SeekFloor(bool cw, float maxAngle){
                      (lostIdx)%command_list_size == 0){
 
                 //Get the numbers
-                AnalyzedFrame analyzedFrame(SLAM,scale);
+                AnalyzedFrame analyzedFrame(SLAM,scale,selfPoseYSign);
                 currentAnalyzedFrame = analyzedFrame;
                 if (index%command_list_size == 0 && !IsAWall(currentAnalyzedFrame)){
                     if (verboseDrone)
