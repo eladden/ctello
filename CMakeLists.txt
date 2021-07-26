@@ -123,12 +123,12 @@ install(TARGETS ctello-stream DESTINATION bin)
 # CTello Examples =============================================================
 
 ## Scan Room --------------------------------------------------------------------
-#add_executable(scan_room examples/scan_room.cpp)
+add_executable(scan_room examples/scan_room.cpp)
 
-#target_include_directories(scan_room PRIVATE include)
+target_include_directories(scan_room PRIVATE include)
 
-#target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
-#target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2)
+target_link_libraries(scan_room ctello ${Pangolin_LIBRARIES})
+target_link_libraries(scan_room ${OpenCV_LIBS} ORB_SLAM2 Control)
 
 ## Scale --------------------------------------------------------------------
 #add_executable(scale_ORBSlam examples/scale_ORBSlam.cpp)
@@ -162,9 +162,9 @@ target_link_libraries(flip ctello)
 target_link_libraries(flip ${OpenCV_LIBS})
 
 ## Follow ---------------------------------------------------------------------
-add_executable(follow examples/follow.cpp)
+#add_executable(follow examples/follow.cpp)
 
-target_include_directories(follow PRIVATE include)
+#target_include_directories(follow PRIVATE include)
 
-target_link_libraries(follow ctello)
-target_link_libraries(follow ${OpenCV_LIBS})
+#target_link_libraries(follow ctello)
+#target_link_libraries(follow ${OpenCV_LIBS})

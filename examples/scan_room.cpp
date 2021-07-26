@@ -36,9 +36,6 @@
 #include "ctello_control.h"
 
 
-
-//const char* const TELLO_STREAM_URL{"udp://0.0.0.0:11111?overrun_nonfatal=1&fifo_size=50000000"};
-
 using ctello::Tello;
 using cv::CAP_FFMPEG;
 using cv::imshow;
@@ -57,14 +54,26 @@ int main(int argc, char **argv)
     }
 
     const bool cw = false;//When in lab set to false
-    float turneAngle = 20;
+    //float turneAngle = 20;
 
     ORBDrone Drone(argv[1],argv[2]);
+    //writeImages = false;
+    std::cout << "Scaling..." << std::endl;
+    Drone.SetScale();
+    std::cout << "Done Scaling, scale=" << Drone.GetScale() << std::endl;
 
+    Drone.OpenAnalyzedFrameFile();
+    //writeImages = true;
+    std::cout << "Scanning..." << std::endl;
+    Drone.Turn(cw,360.0f,true);
+    std::cout << "Done Scanning" << std::endl;
 
-    Drone.Turn(cw,360.0f);
+    //scale might be different because of loop closing
+    std::cout << "Scaling again..." << std::endl;
+    Drone.SetScale();
+    std::cout << "Done Scaling scale=" << Drone.GetScale() << std::endl;
 
-    globalCapture.release();
+    //globalCapture.release();
     allMapPoints = Drone.GetSLAM()->GetMap()->GetAllMapPoints();
     if (allMapPoints.size() > 0)
     {

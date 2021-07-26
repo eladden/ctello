@@ -141,12 +141,12 @@ int main(int argc, char **argv)
         //if (droneState != ORBDrone::DroneState::TooCloseToWall)
 
     }
-    Drone.SendCommand("land");
+//    Drone.SendCommand("land");
 
-    allMapPoints = Drone.GetSLAM()->GetMap()->GetAllMapPoints();
-    if (allMapPoints.size() > 0)
-    {
-        saveMap(1);
-    }
+//    allMapPoints = Drone.GetSLAM()->GetMap()->GetAllMapPoints();
+//    if (allMapPoints.size() > 0)
+//    {
+//        saveMap(1);
+//    }
 
 }

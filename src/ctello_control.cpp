@@ -11,6 +11,7 @@ ORBDrone::~ORBDrone(){
 }
 
 ORBDrone::ORBDrone(char *vocPath, char *settingsPath){
+    analyzedFramesFilename = "FramesInfo.csv";
     scale = 0.0;
     selfPoseYSign = 1.0;
     currentWallDist = 1e10f;
@@ -114,8 +115,15 @@ ORBDrone::ORBDrone(char *vocPath, char *settingsPath){
     }//end while loop
 }
 
+void ORBDrone::OpenAnalyzedFrameFile(){
+    std::string mkdircommand = "mkdir " + dirname;
+    system(mkdircommand.c_str());
+    mkdircommand = "mkdir " + dirname + "/Frames";
+    system(mkdircommand.c_str());
+    analyzedFramesFile.open(analyzedFramesFilename,std::ios_base::app);
+}
 
-ORBDrone::DroneState ORBDrone::Turn(bool cw,float maxAngleDegrees){
+ORBDrone::DroneState ORBDrone::Turn(bool cw,float maxAngleDegrees, bool analyzeAndSave = false){
     float maxAngle = maxAngleDegrees*PI/180.0f;
     const unsigned int command_list_size = 3;
     std::array<std::string, command_list_size> cw_commands{"cw 20", "up 25", "down 25"};
@@ -146,6 +154,62 @@ ORBDrone::DroneState ORBDrone::Turn(bool cw,float maxAngleDegrees){
             //So to get the rotation angle beta around the y axis we can use Rwc(0,1) = -s(b)
             float beta = asin(-Rwc.at<float>(2,0)); //This is the angle of rotation around the y axis (beta)
             currentAngle = beta; // see? simple!
+
+            //we've got a new frame, we can analyze it and save
+            if (analyzeAndSave){
+                AnalyzedFrame analyzedFrame(SLAM,scale,selfPoseYSign);
+                /*
+   cv::Mat , , , ,
+           , selfPose, minWallPoint, minFloorPoint, , , rotatedCovariance;
+
+   */
+                analyzedFramesFile << analyzedFrame.GetFrameID() << " " <<
+                                      analyzedFrame.GetNumOfPoints() << " " <<
+                                      analyzedFrame.GetNumOfPointsLowerThanDrone() << " " <<
+                                      analyzedFrame.GetNumOfPointsHeigherThanDrone() << " " <<
+                                      analyzedFrame.GetMaxFloorDist() << " " <<
+                                      analyzedFrame.GetMinFloorDist() << " " <<
+                                      analyzedFrame.GetMinNonFloorDist() << " " <<
+                                      analyzedFrame.GetKValueOnFloor() << " " <<
+                                      analyzedFrame.GetAverageDistance() << " ";
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetRotatedAveragePoint().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetAverageXYZPoint().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMinWallPoint().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMinFloorPoint().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMaxFloorPoint().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMinFloorPointRotated().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMaxFloorPointRotated().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetGapRotated().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMinRotated().at<float>(i) << " ";
+                }
+                for (int i = 0; i<3;i++){
+                    analyzedFramesFile << analyzedFrame.GetMaxRotated().at<float>(i) << " ";
+                }
+                for (int i=0; i<3;i++){
+                    for (int j=0; j<3; j++){
+                        analyzedFramesFile << analyzedFrame.GetRotatedCovariance().at<float>(i,j) << " ";
+                    }
+                }
+                analyzedFramesFile << std::endl;
+
+            }
         }
         // Act
         if (!busy)// && (index < total_commands))
@@ -590,10 +654,10 @@ ORBDrone::DroneState ORBDrone::SeekFloor(bool cw, float maxAngle){
                         std::cout << "Not Wall!"<< std::endl;
                     //turn to face the max point
                     float x,z,angle;
-                    x = analyzedFrame.GetMaxmaxFloorPointRotated().at<float>(0);
+                    x = analyzedFrame.GetMaxFloorPointRotated().at<float>(0);
                     if (verboseDrone)
                         cout << "x = " << x;
-                    z = analyzedFrame.GetMaxmaxFloorPointRotated().at<float>(2);
+                    z = analyzedFrame.GetMaxFloorPointRotated().at<float>(2);
                     if (verboseDrone)
                         cout << " z = " << z;
                     angle = abs(x)/abs(z);

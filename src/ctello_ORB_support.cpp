@@ -8,9 +8,9 @@ void *UpdateFrame(void *arg)
         try {
             globalCapture >> tempFrame;
             cv::resize(tempFrame, tempFrame, cv::Size(960, 720));
-            if (writeImages && !tempFrame.empty()){
-                cv::imwrite(basefilename + std::to_string(i) + ".jpg", tempFrame);
-            }
+//            if (writeImages && !tempFrame.empty()){
+//                cv::imwrite(dirname + "//"  + basefilename + std::to_string(i) + ".jpg", tempFrame);
+//            }
         } catch (const std::exception& e) {
             std::cout << "Capture error: " << e.what();
         }
@@ -39,11 +39,7 @@ void saveCurrentPosition(cv::Mat Tcw){
 }
 
 void saveMap( int fileNumber) {
-
-    std::string dirname = basefilename + "Dir";
     std::string mkdircommand = "mkdir " + dirname;
-    system(mkdircommand.c_str());
-    mkdircommand = "mkdir " + dirname + "/Frames";
     system(mkdircommand.c_str());
     std::ofstream pointData;
     std::vector<int> savedFrames;
@@ -67,7 +63,7 @@ void saveMap( int fileNumber) {
                     std::find(savedFrames.begin(), savedFrames.end(), frameId) == savedFrames.end())
             {
                 savedFrames.push_back(frameId);
-                const string command = "mv " + basefilename + std::to_string(frameId) + ".jpg ./" + dirname + "/Frames";
+                const string command = "mv " + dirname + "//" + basefilename + std::to_string(frameId) + ".jpg ./" + dirname + "/Frames";
                 system(command.c_str());
             }
 
@@ -75,7 +71,8 @@ void saveMap( int fileNumber) {
     }
     pointData.close();
     std::cout << "saved map" << std::endl;
-    system("rm *.jpg");
+    const string command = "rm ./" + dirname + "//" + "*.jpg";
+    system(command.c_str());
 }
 
 void saveCurrentMap(){
@@ -153,6 +150,10 @@ bool updateSLAM(cv::Mat &currentFrame_, cv::Mat &Tcw_,
     if (gotNewFrame){
         try {
             Tcw_ = SLAM_->TrackMonocular(currentFrame_,currentFrameMilisecondPos);
+            unsigned long frameid = SLAM_->GetTracker()->mCurrentFrame.mnId;
+            if (writeImages){
+                cv::imwrite(dirname + "//"  + basefilename + std::to_string(frameid) + ".jpg", currentFrame_);
+            }
         } catch (const std::exception& e) {
             cout << "ORBSLAM error: " << e.what();
         }
@@ -311,6 +312,7 @@ AnalyzedFrame::AnalyzedFrame(ORB_SLAM2::System *SLAM,float scale_, float selfPos
         //we rotate all the points to this coordinate system:
         rotatedAveragePoint = newCoord * (averageXYZ - selfPose);
         maxFloorPointRotated = newCoord * (maxFloorPoint - selfPose);
+        minFloorPointRotated = newCoord * (minFloorPoint - selfPose);
 
         for (vector<cv::Mat>::iterator point_itr = pointsOnFloor.begin(); point_itr != pointsOnFloor.end();  ++point_itr){
             cv::Mat rotatedPoint =  FloatMatScalarMult(newCoord * (*point_itr - selfPose),scale);

@@ -15,6 +15,8 @@ class ORBDrone
     float scale, currentWallDist,selfPoseYSign;
     bool writeImages,initialized;
     std::chrono::time_point<std::chrono::system_clock> actionSent;
+    std::string analyzedFramesFilename;
+    std::ofstream analyzedFramesFile;
 
 
 public:
@@ -32,7 +34,8 @@ public:
     //These are parameters optimized
     void SetOptParams(float epsilon_for_Ripples, float search_radius1_param, float search_radius2_param, float floatthreshold, float min_num_of_points);
 
-    DroneState Turn(bool cw, float maxAngle);
+    DroneState Turn(bool cw, float maxAngle, bool analyzeAndSave);
+    DroneState Turn(bool cw, float maxAngle){return Turn(cw,maxAngle,false);};
     DroneState SeekFloor(bool cw, float maxAngle);
     DroneState AdvanceForward(float distFromWall, int step, float maxDist);
     //bool IsAWall_Opt(AnalyzedFrame FrameInfo);
@@ -53,6 +56,11 @@ public:
     void SetWriteImages(bool value) {writeImages = value;}
     float GetCurrentWallDist(){return currentWallDist;}
     void SetCurrentWallDist(float value) {currentWallDist = value;}
+    std::string GetAnalyzedFramesFilename(){return analyzedFramesFilename;};
+    void SetAnalyzedFramesFilename(std::string Filename){analyzedFramesFilename = Filename;};
+
+    void OpenAnalyzedFrameFile();
+    std::ofstream *GetAnalyzedFramesFile(){return &analyzedFramesFile;};
 
     std::optional<string> GotDroneResponse();
     void SendCommand(std::string command);

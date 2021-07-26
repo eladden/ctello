@@ -26,6 +26,7 @@ pthread_mutex_t frameLocker;
 std::vector<ORB_SLAM2::MapPoint*> allMapPoints;
 std::vector<ORB_SLAM2::MapPoint*> currMapPoints;
 std::string basefilename = "pointData";
+std::string dirname = basefilename + "Dir";
 const char* const TELLO_STREAM_URL{"udp://0.0.0.0:11111?overrun_nonfatal=1&fifo_size=50000000"};
 
 const bool verboseDrone = true; //this is if you need the drone commands/replys for debug
@@ -56,7 +57,8 @@ protected:
    bool isWall, isGoodFrame, initialized,closedLoop;
    float maxFloorDist, minFloorDist, minNonFloorDist, kValueOnFloor, avgDist,scale;
    cv::Mat rotatedAveragePoint, averageXYZ, gapRotated, minRotated,
-           maxRotated, selfPose, minWallPoint, minFloorPoint, maxFloorPoint, maxFloorPointRotated, rotatedCovariance;
+           maxRotated, selfPose, minWallPoint, minFloorPoint, minFloorPointRotated,
+           maxFloorPoint, maxFloorPointRotated, rotatedCovariance;
    int numOfPoints, numOfPointsLowerThanDrone, numOfPointsHeigherThanDrone;
    unsigned long int frameID;
    ORB_SLAM2::KeyFrame* currentKeyFrame;
@@ -81,6 +83,7 @@ public:
        minFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        maxFloorPoint   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        maxFloorPointRotated   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+       minFloorPointRotated   = (Mat_<float>(3,1) << 0.0, 0.0, 0.0);
        rotatedCovariance = (Mat_<float>(3,3)<< 0.0,0.0,0.0,  0.0,0.0,0.0, 0.0,0.0,0.0);
 
    }
@@ -102,7 +105,7 @@ public:
    bool GetClosedLoop(){return closedLoop;}
    float GetMaxFloorDist(){return maxFloorDist;}
    float GetMinFloorDist(){return minFloorDist;}
-   float GetMinKValueOnFloor(){return kValueOnFloor;}
+   float GetKValueOnFloor(){return kValueOnFloor;}
    float GetMinNonFloorDist(){return minNonFloorDist;}
    float GetAverageDistance(){return avgDist;}
    cv::Mat GetAverageXYZPoint(){return averageXYZ;}
@@ -110,9 +113,13 @@ public:
    cv::Mat GetRotatedCovariance(){return rotatedCovariance;}
    cv::Mat GetSelfPose(){return selfPose;}
    cv::Mat GetMaxFloorPoint(){return maxFloorPoint;}
-   cv::Mat GetMaxmaxFloorPointRotated(){return maxFloorPointRotated;}
+   cv::Mat GetMaxFloorPointRotated(){return maxFloorPointRotated;}
    cv::Mat GetMinFloorPoint(){return minFloorPoint;}
    cv::Mat GetMinWallPoint(){return minWallPoint;}
+   cv::Mat GetMinFloorPointRotated(){return minFloorPointRotated;}
+   cv::Mat GetMinRotated(){return minRotated;}
+   cv::Mat GetMaxRotated(){return maxRotated;}
+   cv::Mat GetGapRotated(){return gapRotated;}
    int GetNumOfPoints(){return numOfPoints;}
    int GetNumOfPointsLowerThanDrone(){return numOfPointsLowerThanDrone;}
    int GetNumOfPointsHeigherThanDrone(){return numOfPointsHeigherThanDrone;}
